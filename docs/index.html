@@ -403,12 +403,27 @@ function updatePartRequestStatus(orderId,requestId,status){
  if(!storeOrders()){r.state=previous;return}
  renderPartsJournal();if($('orderDetail').classList.contains('show'))renderOrderDetail()
 }
+function editPartProcurement(orderId,requestId){
+ const o=orders.find(x=>String(x.id)===String(orderId)),r=o?.partsRequests?.find(x=>String(x.id)===String(requestId));if(!r)return;
+ const supplier=prompt('Поставщик (можно указать нового)',r.supplier||'');if(supplier===null)return;
+ const costRaw=prompt('Закупочная цена за единицу, ₽',String(r.buyPrice??0));if(costRaw===null)return;
+ const price=Number(costRaw.replace(',','.'));if(!Number.isFinite(price)||price<0)return alert('Некорректная цена');
+ const expected=prompt('Ожидаемая дата поставки ГГГГ-ММ-ДД (или пусто)',r.expectedDate||'');if(expected===null)return;
+ if(expected&&!/^\d{4}-\d{2}-\d{2}$/.test(expected))return alert('Дата должна быть в формате ГГГГ-ММ-ДД');
+ const previous={supplier:r.supplier,buyPrice:r.buyPrice,expectedDate:r.expectedDate};
+ Object.assign(r,{supplier:supplier.trim(),buyPrice:price,expectedDate:expected});
+ auditOrder(o,'Закупка запчасти '+r.name+': '+(supplier||'Поставщик не указан'));
+ if(!storeOrders()){Object.assign(r,previous);return}renderPartsJournal()
+}
 function renderPartsJournal(){
  const el=$('partsJournalContent');if(!el)return;
  const status=val('partsJournalStatus'),q=val('partsJournalSearch').toLocaleLowerCase();
- const rows=orders.flatMap(o=>(o.partsRequests||[]).map(r=>({o,r}))).filter(({o,r})=>(!status||r.state===status)&&(!q||(o.number+' '+r.name+' '+(r.requestedBy||'')+' '+(r.note||'')).toLocaleLowerCase().includes(q)));
+ const all=orders.flatMap(o=>(o.partsRequests||[]).map(r=>({o,r})));
+ const fresh=all.filter(x=>x.r.state==='Запрошено').length;
+ const rows=all.filter(({o,r})=>(!status||r.state===status)&&(!q||(o.number+' '+r.name+' '+(r.requestedBy||'')+' '+(r.note||'')+' '+(r.supplier||'')).toLocaleLowerCase().includes(q)));
  const allowed=['Запрошено','Заказано','В пути','Получено','Зарезервировано','Выдано механику'];
- el.innerHTML='<p class="muted">Найдено заявок: '+rows.length+'</p>'+(rows.length?'<div style="overflow:auto"><table><thead><tr><th>Заказ</th><th>Запчасть</th><th>Количество</th><th>Механик</th><th>Статус</th></tr></thead><tbody>'+rows.map(({o,r})=>'<tr><td><button onclick="openOrderDetail('+o.id+')">'+clean(o.number)+'</button></td><td><b>'+clean(r.name)+'</b><div class="muted">'+clean(r.note||'')+'</div></td><td>'+Number(r.qty)+'</td><td>'+clean(r.requestedBy||'Администратор')+'</td><td><select aria-label="Статус запчасти" onchange="updatePartRequestStatus('+o.id+','+r.id+',this.value)">'+allowed.map(x=>'<option '+(r.state===x?'selected':'')+'>'+x+'</option>').join('')+'</select></td></tr>').join('')+'</tbody></table></div>':'<div class="empty">Заявок по выбранному фильтру нет</div>')
+ el.innerHTML='<p><b>Новые заявки: '+fresh+'</b> · Найдено: '+rows.length+'</p>'+(rows.length?'<div style="overflow:auto"><table><thead><tr><th>Заказ</th><th>Запчасть</th><th>Количество</th><th>Механик</th><th>Закупка</th><th>Статус</th></tr></thead><tbody>'+rows.map(({o,r})=>'<tr><td><button onclick="openOrderDetail('+o.id+')">'+clean(o.number)+'</button></td><td><b>'+clean(r.name)+'</b><div class="muted">'+clean(r.note||'')+'</div></td><td>'+Number(r.qty)+'</td><td>'+clean(r.requestedBy||'Администратор')+'</td><td><div>'+clean(r.supplier||'Поставщик не указан')+'</div><small>'+clean(r.expectedDate||'Дата не задана')+'</small><div>'+fmt(Number(r.buyPrice||0))+' / шт.</div><button onclick="editPartProcurement('+o.id+','+r.id+')">Изменить закупку</button></td><td><select aria-label="Статус запчасти" onchange="updatePartRequestStatus('+o.id+','+r.id+',this.value)">'+allowed.map(x=>'<option '+(r.state===x?'selected':'')+'>'+x+'</option>').join('')+'</select></td></tr>').join('')+'</tbody></table></div>':'<div class="empty">Заявок по выбранному фильтру нет</div>')
+ const nav=[...document.querySelectorAll('aside button')].find(b=>b.getAttribute('onclick')?.includes("'partsJournal'"));if(nav)nav.textContent='📦 Заявки на запчасти'+(fresh?' ('+fresh+')':'')
 }
 function renderAll(){renderPartsJournal();renderManagement();renderAdmin();renderPayroll();renderProfit();renderOwnerSummary();renderWorkspaces();$('metrics').innerHTML=[['Всего заказов',orders.length],['В работе',orders.filter(x=>x.status==='В работе').length],['Готовы',orders.filter(x=>x.status==='Готов').length],['Сумма заказов',fmt(orders.reduce((s,x)=>s+x.total,0))]].map(x=>'<div class="metric"><span class="muted">'+x[0]+'</span><strong>'+x[1]+'</strong></div>').join('');renderOrders('recent',true);renderOrders('ordersTable');$('fleetTable').innerHTML=orders.length?'<table><tr><th>Клиент</th><th>Телефон</th><th>Тип</th><th>Марка / модель</th><th>VIN</th></tr>'+orders.map(o=>'<tr><td>'+clean(o.client)+'</td><td>'+clean(o.phone)+'</td><td>'+clean(o.type)+'</td><td>'+clean(o.brand+' '+o.model)+'</td><td>'+clean(o.vin)+'</td></tr>').join('')+'</table>':'<div class="empty">Клиенты появятся после создания первого заказа</div>'}
 async function scanVinPhoto(input){
