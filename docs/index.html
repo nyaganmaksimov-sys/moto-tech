@@ -24,7 +24,7 @@ function storeOrders(){try{localStorage.setItem(K,JSON.stringify(orders));return
 function openOrderDetail(id){const o=orders.find(x=>x.id===id);if(!o)return;window.currentOrderId=id;view('orderDetail');renderOrderDetail()}
 function detailPhoto(input,stage){const file=input.files?.[0];if(!file)return;resizePhoto(file).then(src=>{const o=orders.find(x=>x.id===window.currentOrderId);if(!o)return;o.photos=o.photos||[];o.photos.push({src,stage,at:new Date().toISOString()});auditOrder(o,'Добавлено фото: '+stage);storeOrders();renderOrderDetail()}).catch(()=>alert('Ошибка изображения'))}
 function detailPayment(){const o=orders.find(x=>x.id===window.currentOrderId),amount=Number($('detailAmount').value),method=$('detailMethod').value;if(!o||!Number.isFinite(amount)||amount<=0)return alert('Введите сумму больше нуля');o.payments=o.payments||[];o.payments.push({amount,method,at:new Date().toISOString()});auditOrder(o,'Демо-оплата: '+fmt(amount)+' ('+method+')');storeOrders();renderOrderDetail();renderAll()}
-function detailStatus(){const o=orders.find(x=>x.id===window.currentOrderId);if(!o)return;o.status=$('detailStatus').value;o.mechanic=$('detailMechanic').value;auditOrder(o,'Статус: '+o.status);storeOrders();renderOrderDetail();renderAll()}
+function detailStatus(){const o=orders.find(x=>x.id===window.currentOrderId);if(!o)return;if($('detailStatus').value==='Выдан'&&!o.handover)return alert('Используйте раздел подтверждения выдачи техники');o.status=$('detailStatus').value;o.mechanic=$('detailMechanic').value;auditOrder(o,'Статус: '+o.status);storeOrders();renderOrderDetail();renderAll()}
 function detailNote(){const o=orders.find(x=>x.id===window.currentOrderId),note=$('detailNote').value.trim();if(!o||!note)return;o.notes=o.notes||[];o.notes.push({at:new Date().toISOString(),text:note});auditOrder(o,'Добавлена заметка');storeOrders();renderOrderDetail()}
 
 function inspectionCard(o){
@@ -209,6 +209,25 @@ function editOrderLine(index,key,value){
  recordEstimateChange(o,oldTotal,'Позиция '+x.name+': '+key);auditOrder(o,'Изменена позиция: '+x.name+' · '+key);
  if(!storeOrders()){Object.assign(x,before);o.total=oldTotal;return}renderOrderDetail();renderAll()
 }
+function handoverCard(o){
+ const h=o.handover,paid=(o.payments||[]).reduce((a,p)=>a+Number(p.amount||0),0),due=Math.max(0,Number(o.total||0)-paid);
+ if(h)return '<div class="card"><h3>Передача техники подтверждена</h3><p>Дата: '+new Date(h.at).toLocaleString('ru-RU')+'</p><p>Выдал: '+clean(h.employee)+' · Получил: '+clean(h.recipient)+'</p><p>Итог: '+fmt(h.total)+' · Оплачено: '+fmt(h.paid)+' · Остаток: '+fmt(h.due)+'</p><p>Способ последней оплаты: '+clean(h.method)+'</p></div>';
+ const incomplete=(o.items||[]).filter(x=>x.kind==='work'&&x.workStatus!=='Выполнена').length,unapproved=(o.priceHistory||[]).filter(x=>x.approval!=='Согласовано').length;
+ return '<div class="card"><h3>Подтверждение выдачи техники</h3><p class="hint">Перед выдачей проверьте состояние, оплаты и согласования. Отметка фиксируется в истории заказ-наряда.</p><div class="grid"><div><label>Ответственный сотрудник</label><input id="handoverEmployee" placeholder="Кто выдал"></div><div><label>Получатель</label><input id="handoverRecipient" value="'+clean(o.client||'')+'" placeholder="Кому выдана техника"></div><div><label>Способ последней оплаты</label><select id="handoverMethod"><option>Не указано</option><option>Наличные</option><option>Карта</option><option>Перевод</option><option>Без оплаты при выдаче</option></select></div></div><p>Незавершённые работы: <b>'+incomplete+'</b> · Несогласованные изменения: <b>'+unapproved+'</b> · Остаток: <b>'+fmt(due)+'</b></p><button class="primary" onclick="confirmHandover()">Подтвердить выдачу</button></div>'
+}
+function confirmHandover(){
+ const o=orders.find(x=>x.id===window.currentOrderId);if(!o||o.handover)return;
+ const employee=val('handoverEmployee'),recipient=val('handoverRecipient'),method=val('handoverMethod');
+ if(!employee||!recipient)return alert('Укажите сотрудника и получателя');
+ const incomplete=(o.items||[]).filter(x=>x.kind==='work'&&x.workStatus!=='Выполнена').length,unapproved=(o.priceHistory||[]).filter(x=>x.approval!=='Согласовано').length;
+ const paid=(o.payments||[]).reduce((a,p)=>a+Number(p.amount||0),0),due=Math.max(0,Number(o.total||0)-paid);
+ if(incomplete||unapproved)return alert('Сначала завершите работы и зафиксируйте согласование изменений');
+ if(due>0&&!confirm('Остаток оплаты '+fmt(due)+'. Подтвердить выдачу с задолженностью?'))return;
+ if(!confirm('Подтвердить передачу техники получателю '+recipient+'?'))return;
+ const previous=o.status;o.status='Выдан';o.handover={at:new Date().toISOString(),employee,recipient,method,total:o.total,paid,due};
+ auditOrder(o,'Выдача техники: '+employee+' → '+recipient);
+ if(!storeOrders()){delete o.handover;o.status=previous;return}renderOrderDetail();renderAll()
+}
 function renderOrderDetail(){
  const o=orders.find(x=>x.id===window.currentOrderId);if(!o)return;
  const photos=o.photos||[],paid=(o.payments||[]).reduce((a,x)=>a+x.amount,0),money=x=>fmt(x||0);
@@ -220,7 +239,7 @@ function renderOrderDetail(){
  '<div class="card"><h3>Фотофиксация</h3><div class="actions">'+photos.map(p=>'<div><a target="_blank" rel="noopener" href="'+p.src+'"><img alt="Фото" src="'+p.src+'" style="width:145px;height:110px;object-fit:cover;border-radius:9px"></a><div class="muted">'+clean(p.stage)+'</div></div>').join('')+'</div><div class="grid"><div><label>Фото повреждения или ремонта</label><input type="file" accept="image/*" capture="environment" onchange="detailPhoto(this,\'Повреждение / процесс\')"></div><div><label>Фото после ремонта</label><input type="file" accept="image/*" capture="environment" onchange="detailPhoto(this,\'После ремонта\')"></div></div></div>'+
  '<div class="card"><h3>Работы и запчасти</h3><table><tr><th>Наименование</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr>'+lines+'</table><div class="amount">Итого: '+money(o.total)+'</div></div>'+
  '<div class="card"><h3>Оплаты (демо)</h3><p>Оплачено: '+money(paid)+' · Остаток: '+money(Math.max(0,o.total-paid))+'</p><div class="grid"><input id="detailAmount" type="number" min=".01" step=".01" placeholder="Сумма ₽"><select id="detailMethod"><option>Наличные</option><option>Карта</option><option>Перевод</option></select><button onclick="detailPayment()">Добавить оплату</button></div></div>'+
- '<div class="card"><h3>Заметки и история</h3><textarea id="detailNote" placeholder="Заключение диагностики / комментарий"></textarea><button onclick="detailNote()">Добавить запись</button>'+(o.notes||[]).map(x=>'<p>'+clean(x.text)+'</p>').join('')+(o.history||[]).map(x=>'<div class="line"><small>'+new Date(x.at).toLocaleString('ru-RU')+'</small><span>'+clean(x.message)+'</span></div>').join('')+'</div>'+inspectionCard(o)+estimateCard(o)+extraWorksCard(o)+orderPartsCard(o)+laborTimeCard(o)+distributeWorksCard(o)+profitCard(o);
+ '<div class="card"><h3>Заметки и история</h3><textarea id="detailNote" placeholder="Заключение диагностики / комментарий"></textarea><button onclick="detailNote()">Добавить запись</button>'+(o.notes||[]).map(x=>'<p>'+clean(x.text)+'</p>').join('')+(o.history||[]).map(x=>'<div class="line"><small>'+new Date(x.at).toLocaleString('ru-RU')+'</small><span>'+clean(x.message)+'</span></div>').join('')+'</div>'+inspectionCard(o)+estimateCard(o)+extraWorksCard(o)+orderPartsCard(o)+laborTimeCard(o)+distributeWorksCard(o)+profitCard(o)+handoverCard(o);
 }
 let intakeStep=0;
 function setIntakeStep(step){
@@ -315,7 +334,7 @@ const WORKFLOW=['Принят','Диагностика','Ожидание зап
 function workflowStatus(o){return WORKFLOW.includes(o.status)?o.status:'Принят'}
 function updateJobStatus(id,status){
  const o=orders.find(x=>String(x.id)===String(id));
- if(!o||!WORKFLOW.includes(status)||o.status===status)return;
+ if(!o||!WORKFLOW.includes(status)||o.status===status)return;if(status==='Выдан'&&!o.handover)return alert('Подтвердите выдачу в карточке заказа');
  const previous=o.status;o.status=status;
  if(typeof auditOrder==='function')auditOrder(o,'Этап ремонта: '+previous+' → '+status);
  if(typeof storeOrders==='function'?!storeOrders():false){o.status=previous;return}
