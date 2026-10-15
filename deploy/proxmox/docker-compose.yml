@@ -1,0 +1,63 @@
+name: mototech
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../backend/migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"${POSTGRES_USER}\" -d \"${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [private]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/proxmox/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      STORAGE_DIR: /srv/moto-photos
+    volumes:
+      - photos:/srv/moto-photos
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports:
+      - "127.0.0.1:18080:8000"
+    networks: [private]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - backups:/backup
+      - ./backup.sh:/backup.sh:ro
+    command: ["sh","/backup.sh"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [private]
+
+networks:
+  private:
+    internal: true
+volumes:
+  pgdata:
+  photos:
+  backups:
