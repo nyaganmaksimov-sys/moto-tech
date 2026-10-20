@@ -42,6 +42,11 @@ jobs:
         run: |
           psql -v ON_ERROR_STOP=1 -f backend/migrations/001_storage_foundation.sql
           psql -v ON_ERROR_STOP=1 -f backend/migrations/002_staff_auth.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/003_repair_orders.sql
+      - name: Validate repair schema
+        run: |
+          psql -v ON_ERROR_STOP=1 -c "INSERT INTO repair_orders(order_number,client_name,brand,model) VALUES ('MT-TEST-CI','Demo','Yamaha','MT-07');"
+          psql -v ON_ERROR_STOP=1 -c "SELECT count(*) FROM repair_orders;"
       - name: Validate schema constraints
         run: |
           psql -v ON_ERROR_STOP=1 -c "INSERT INTO storage_contracts(contract_number,owner_name,vin,brand_model) VALUES ('TEST-1','Demo','FRAME-001','Demo bike');"
