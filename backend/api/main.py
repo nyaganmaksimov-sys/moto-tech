@@ -706,3 +706,29 @@ async def revoke_pin_device(payload:PinDeviceRevoke,person=Depends(actor),db=Dep
                   WHERE employee_id=$1 AND device_hash=$2 AND revoked_at IS NULL""",
                   person["id"],_pin_device_digest(payload.device_token))
     return {"ok":True}
+
+@app.patch("/clients/{client_id}")
+async def update_client(client_id:uuid.UUID,payload:ClientCreate,
+    person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        row=await c.fetchrow("""UPDATE service_clients SET full_name=$2,phone=$3,email=$4,notes=$5
+             WHERE id=$1 RETURNING *""",client_id,payload.full_name.strip(),payload.phone,payload.email,payload.notes)
+        if not row:raise HTTPException(404,"Клиент не найден")
+    return dict(row)
+
+@app.patch("/vehicles/{vehicle_id}")
+async def update_vehicle(vehicle_id:uuid.UUID,payload:VehicleCreate,
+    person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        try:
+            row=await c.fetchrow("""UPDATE service_vehicles SET client_id=$2,vehicle_type=$3,
+                 brand=$4,model=$5,year=$6,vin=$7,plate=$8,notes=$9
+                 WHERE id=$1 RETURNING *""",vehicle_id,payload.client_id,payload.vehicle_type,
+                 payload.brand.strip(),payload.model.strip(),payload.year,
+                 payload.vin.strip().upper() if payload.vin else None,payload.plate,payload.notes)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409,"Техника с таким VIN уже существует")
+        except asyncpg.ForeignKeyViolationError:
+            raise HTTPException(422,"Владелец не найден")
+        if not row:raise HTTPException(404,"Техника не найдена")
+    return dict(row)
