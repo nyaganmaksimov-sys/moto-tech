@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend.api.storage_rules import normalize_vin, validate_transition
-from backend.api import google_drive_storage
+from backend.api import supabase_storage
 
 pool = None
 password_hash = PasswordHash.recommended()
@@ -271,8 +271,8 @@ async def upload_storage_photo(
         raise HTTPException(422, "Damage description is required")
     if len(note) > 2000:
         raise HTTPException(422, "Photo note is too long")
-    if not google_drive_storage.configured():
-        raise HTTPException(503, 'Google Drive test storage not configured')
+    if not supabase_storage.configured():
+        raise HTTPException(503, 'Supabase test storage not configured')
     raw = await photo.read(MAX_IMAGE_BYTES + 1)
     await photo.close()
     if not raw or len(raw) > MAX_IMAGE_BYTES:
@@ -297,7 +297,7 @@ async def upload_storage_photo(
     object_key = None
     try:
         object_key = await run_in_threadpool(
-            google_drive_storage.upload_private_image,
+            supabase_storage.upload_private_image,
             data, f"{contract_id}-{photo_id}.jpg"
         )
         async with db.acquire() as c:
@@ -318,7 +318,7 @@ async def upload_storage_photo(
     except Exception:
         if object_key:
             try:
-                await run_in_threadpool(google_drive_storage.remove_private_image, object_key)
+                await run_in_threadpool(supabase_storage.remove_private_image, object_key)
             except Exception:
                 pass  # Cleanup failure is logged for later orphan-file reconciliation.
         raise
@@ -347,9 +347,9 @@ async def accept_storage(
                 raise HTTPException(422, "Document the motorcycle body condition")
             photos = await c.fetch("""SELECT kind,note,object_key FROM storage_photos
                 WHERE contract_id=$1 AND deleted_at IS NULL""", contract_id)
-            if not google_drive_storage.configured():
-                raise HTTPException(503, "Google Drive storage not configured")
-            checks = await run_in_threadpool(lambda: all(google_drive_storage.photo_exists(row["object_key"]) for row in photos))
+            if not supabase_storage.configured():
+                raise HTTPException(503, "Supabase Storage not configured")
+            checks = await run_in_threadpool(lambda: all(supabase_storage.photo_exists(row["object_key"]) for row in photos))
             if not checks:
                 raise HTTPException(409, "One or more uploaded photos are missing")
             try:
