@@ -48,7 +48,7 @@ body:has(#mainSidebar:not(.hidden)) .server-dashboard{max-width:1450px;margin:0 
 #mainSidebar .side-link:focus-visible{outline:2px solid #f04b55;outline-offset:2px}
 #mainSidebar .side-link:disabled{opacity:.38;min-height:34px;padding:7px 12px}
 #mainSidebar .side-sep{margin-top:13px;border-top:1px solid #303847;padding:16px 12px 9px;text-transform:uppercase;letter-spacing:.08em}
-body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:258px}
+body:has(#mainSidebar:not(.hidden)) #inventoryScreen,body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:258px}
 body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 #systemTabs #openSystem,#systemTabs #openRepairs,#systemTabs #openStorage,#systemTabs #openEmployees{display:none}
 @media(max-width:850px){
@@ -75,13 +75,16 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▥ Доска заказов</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">≡ Прайс-лист</button>
 <button class="side-link" data-target="fleet">◇ Клиенты и техника</button>
-<button class="side-link" disabled title="Ожидает подключения к общей базе">▣ Склад и запчасти</button>
+<button class="side-link" data-target="inventory">▣ Склад и запчасти</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▧ Заявки на запчасти</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▥ Поставщики</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">₽ Финансы</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">⚙ Настройки</button>
 </aside>
-<section id="fleetScreen" class="hidden"><div class="server-dashboard"><h2>Клиенты и техника</h2><div class="row dashboard-content">
+<section id="inventoryScreen" class="hidden"><div class="server-dashboard"><h2>Склад и запчасти</h2><p class="muted">Остатки и операции хранятся в PostgreSQL</p>
+<div class="row dashboard-content"><section class="card"><h3>Остатки</h3><div id="stockItems"></div><h3>Последние движения</h3><div id="stockMovements"></div></section>
+<section class="card"><h3>Новая запчасть</h3><form id="partCreate"><label>Артикул</label><input name="sku" required><label>Наименование</label><input name="name" required><label>Единица</label><input name="unit" value="шт" required><label>Закупочная цена ₽</label><input name="purchase_price" type="number" step="0.01" min="0" value="0"><label>Цена продажи ₽</label><input name="sale_price" type="number" step="0.01" min="0" value="0"><button class="primary">Добавить</button></form>
+<h3>Приход / расход</h3><form id="stockMove"><label>Запчасть</label><select name="part_id" id="stockPart" required></select><label>Количество (+ приход, − расход)</label><input name="delta" type="number" step="0.001" required><label>Причина</label><input name="reason" required><label>UUID заказ-наряда (только для списания, необязательно)</label><input name="repair_id" placeholder="UUID заказа"><button class="primary">Провести операцию</button></form></section></div></div></section><section id="fleetScreen" class="hidden"><div class="server-dashboard"><h2>Клиенты и техника</h2><div class="row dashboard-content">
 <div class="card"><h3>Клиенты</h3><input id="clientSearch" placeholder="Поиск клиента" aria-label="Поиск клиента"><div id="clientsList"></div><h3>Новый клиент</h3><form id="clientCreate"><label>ФИО</label><input name="full_name" required minlength="2"><label>Телефон</label><input name="phone"><label>Email</label><input name="email" type="email"><label>Примечание</label><textarea name="notes"></textarea><button class="primary">Добавить клиента</button></form></div>
 <div class="card"><h3>Техника</h3><div id="vehiclesList"></div><h3>Добавить технику</h3><form id="vehicleCreate"><label>Владелец</label><select name="client_id" id="vehicleClient" required></select><label>Марка</label><input name="brand" required><label>Модель</label><input name="model" required><label>Год выпуска</label><input name="year" type="number" min="1900" max="2200"><label>VIN / номер рамы</label><input name="vin"><label>Госномер</label><input name="plate"><button class="primary">Сохранить технику</button></form></div>
 </div></div></section><section id="employeesScreen" class="hidden"><div class="server-dashboard"><h2>Сотрудники MOTO TECH</h2><p class="muted">Учётные записи сотрудников из PostgreSQL</p><div class="row dashboard-content"><div class="card"><h3>Список сотрудников</h3><div id="employeeList"></div></div>
@@ -170,10 +173,10 @@ function setSignedIn(on){
  if(on){$('pinLogin').classList.add('hidden');$('pinSetup').classList.add('hidden')}
  $('systemTabs').classList.toggle('hidden',!on);
  $('mainSidebar').classList.toggle('hidden',!on);
- if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen','fleetScreen'])$(id).classList.add('hidden');current=null}
+ if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen','fleetScreen','inventoryScreen'])$(id).classList.add('hidden');current=null}
 }
 function switchSystem(view){
- const employees=view==='employees',storage=view==='storage',repairs=view==='repairs',home=view==='full',fleet=view==='fleet';
+ const employees=view==='employees',storage=view==='storage',repairs=view==='repairs',home=view==='full',fleet=view==='fleet',inventory=view==='inventory';
  $('fullSystem').classList.toggle('hidden',!(home||repairs));
  $('repairDashboardContent').classList.toggle('hidden',home);
  $('homeOrderCard').classList.toggle('hidden',!home);
@@ -181,12 +184,38 @@ function switchSystem(view){
  $('detail').classList.toggle('hidden',!storage||!current);
  $('employeesScreen').classList.toggle('hidden',!employees);
  $('fleetScreen').classList.toggle('hidden',!fleet);
+ $('inventoryScreen').classList.toggle('hidden',!inventory);
  for(const [id,active] of [['openSystem',home],['openRepairs',repairs],['openStorage',storage],['openEmployees',employees]])$(id).classList.toggle('active',active);
  document.querySelectorAll('#mainSidebar [data-target]').forEach(b=>b.classList.toggle('active',b.dataset.target===view));
  if(home||repairs)refreshRepairs().catch(e=>status(e.message));
  if(employees)refreshEmployees().catch(e=>status(e.message));
  if(fleet)refreshFleet().catch(e=>status(e.message));
+ if(inventory)refreshInventory().catch(e=>status(e.message));
 }
+async function refreshInventory(){
+ const [parts,movements]=await Promise.all([request('/inventory'),request('/inventory/movements')]);
+ const items=$('stockItems'),history=$('stockMovements'),select=$('stockPart');
+ items.replaceChildren();history.replaceChildren();select.replaceChildren();
+ for(const part of parts){
+   const line=document.createElement('p');
+   line.textContent=part.sku+' · '+part.name+' — '+part.quantity+' '+part.unit+' · '+part.sale_price+' ₽';
+   items.append(line);
+   const opt=new Option(part.sku+' · '+part.name,part.id);select.add(opt);
+ }
+ if(!parts.length)items.textContent='Запчастей пока нет';
+ for(const move of movements.slice(0,30)){const p=document.createElement('p');p.textContent=move.part_name+' · '+(Number(move.delta)>0?'+':'')+move.delta+' · '+move.reason;history.append(p)}
+ if(!movements.length)history.textContent='Движений пока нет';
+}
+$('partCreate').onsubmit=async event=>{
+ event.preventDefault();const form=event.currentTarget,btn=form.querySelector('button');btn.disabled=true;
+ try{const data=Object.fromEntries(new FormData(form).entries());await request('/inventory',{method:'POST',body:data});form.reset();await refreshInventory();status('Запчасть добавлена')}
+ catch(e){status('Не удалось добавить запчасть: '+e.message)}finally{btn.disabled=false}
+};
+$('stockMove').onsubmit=async event=>{
+ event.preventDefault();const form=event.currentTarget,btn=form.querySelector('button');btn.disabled=true;
+ try{const data=Object.fromEntries(new FormData(form).entries());data.delta=Number(data.delta);data.repair_id=data.repair_id||null;await request('/inventory/movements',{method:'POST',body:data});form.reset();await refreshInventory();status('Складская операция проведена')}
+ catch(e){status('Не удалось провести операцию: '+e.message)}finally{btn.disabled=false}
+};
 let clientsCache=[];
 async function refreshFleet(){
  const [clients,vehicles]=await Promise.all([request('/clients'),request('/vehicles')]);
