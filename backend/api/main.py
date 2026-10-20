@@ -1018,3 +1018,60 @@ async def one_c_preview(entity_type:str,limit:int=20,
     return {"schema_version":"mototech.1c.preview.v1","entity_type":entity_type,
             "transferred":False,"rows":[{k:str(v) if isinstance(v,(Decimal,uuid.UUID)) else v
               for k,v in dict(row).items()} for row in rows]}
+
+class OneCMappingInput(BaseModel):
+    local_type: str
+    local_id: uuid.UUID
+    external_guid: uuid.UUID
+
+ONE_C_MAPPING_TABLES={
+    "clients": "SELECT EXISTS(SELECT 1 FROM service_clients WHERE id=$1)",
+    "vehicles": "SELECT EXISTS(SELECT 1 FROM service_vehicles WHERE id=$1)",
+    "suppliers": "SELECT EXISTS(SELECT 1 FROM inventory_suppliers WHERE id=$1)",
+    "parts": "SELECT EXISTS(SELECT 1 FROM inventory_parts WHERE id=$1)",
+    "prices": "SELECT EXISTS(SELECT 1 FROM service_price_items WHERE id=$1)"
+}
+
+@app.get("/integrations/1c/mappings")
+async def one_c_mappings(person=Depends(require_roles("owner_manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        records=await c.fetch("""SELECT local_type,local_id,external_guid,created_at
+              FROM integration_1c_mappings ORDER BY created_at DESC LIMIT 300""")
+    return [dict(r) for r in records]
+
+@app.post("/integrations/1c/mappings",status_code=201)
+async def one_c_add_mapping(payload:OneCMappingInput,
+    person=Depends(require_roles("owner_manager")),db=Depends(database)):
+    if payload.local_type not in ONE_C_MAPPING_TABLES:
+        raise HTTPException(422,"Неподдерживаемый справочник")
+    async with db.acquire() as c:
+        if not await c.fetchval(ONE_C_MAPPING_TABLES[payload.local_type],payload.local_id):
+            raise HTTPException(404,"Объект MOTO TECH не найден")
+        try:
+            row=await c.fetchrow("""INSERT INTO integration_1c_mappings(local_type,local_id,external_guid)
+                 VALUES($1,$2,$3) RETURNING local_type,local_id,external_guid,created_at""",
+                 payload.local_type,payload.local_id,str(payload.external_guid))
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409,"Объект уже сопоставлен")
+    return dict(row)
+
+@app.get("/integrations/1c/dry-run/{entity_type}")
+async def one_c_dry_run(entity_type:str,person=Depends(require_roles("owner_manager","administrator")),
+    db=Depends(database)):
+    if entity_type not in ONE_C_MAPPING_TABLES:raise HTTPException(404,"Справочник не поддерживается")
+    count_queries={
+       "clients":"SELECT id FROM service_clients ORDER BY id LIMIT 100",
+       "vehicles":"SELECT id FROM service_vehicles ORDER BY id LIMIT 100",
+       "suppliers":"SELECT id FROM inventory_suppliers ORDER BY id LIMIT 100",
+       "parts":"SELECT id FROM inventory_parts ORDER BY id LIMIT 100",
+       "prices":"SELECT id FROM service_price_items ORDER BY id LIMIT 100"}
+    async with db.acquire() as c:
+        rows=await c.fetch(count_queries[entity_type])
+        mappings=await c.fetch("SELECT local_id,external_guid FROM integration_1c_mappings WHERE local_type=$1",entity_type)
+    mapped={r["local_id"]:r["external_guid"] for r in mappings}
+    result=[{"local_id":str(r["id"]),"action":"update_candidate" if r["id"] in mapped else "create_candidate",
+             "external_guid":mapped.get(r["id"])} for r in rows]
+    return {"mode":"dry_run","connected":False,"sent":False,"entity_type":entity_type,
+            "sample_count":len(result),"mapped_count":sum(x["action"]=="update_candidate" for x in result),
+            "unmapped_count":sum(x["action"]=="create_candidate" for x in result),
+            "operations":result}
