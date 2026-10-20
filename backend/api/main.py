@@ -858,3 +858,70 @@ async def parts_requests_status(request_id:uuid.UUID,payload:PartRequestStatus,
             updated=await c.fetchrow("""UPDATE inventory_requests
               SET status=$2,updated_at=now() WHERE id=$1 RETURNING *""",request_id,payload.status)
     return dict(updated)
+
+class AppointmentInput(BaseModel):
+    client_id: uuid.UUID
+    vehicle_id: uuid.UUID | None = None
+    scheduled_at: datetime
+    service_description: str = Field(min_length=3,max_length=3000)
+    notes: str | None = Field(default=None,max_length=3000)
+
+class WarrantyInput(BaseModel):
+    repair_id: uuid.UUID
+    complaint: str = Field(min_length=3,max_length=5000)
+
+class ServiceStatus(BaseModel):
+    status: str
+
+@app.get("/appointments")
+async def appointments_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("""SELECT a.*,c.full_name AS client_name
+           FROM service_appointments a JOIN service_clients c ON c.id=a.client_id
+           ORDER BY a.scheduled_at DESC LIMIT 300""")]
+
+@app.post("/appointments",status_code=201)
+async def appointments_create(payload:AppointmentInput,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    if payload.scheduled_at.tzinfo is None:raise HTTPException(422,"Укажите часовой пояс")
+    async with db.acquire() as c:
+        if payload.vehicle_id and not await c.fetchval("SELECT EXISTS(SELECT 1 FROM service_vehicles WHERE id=$1 AND client_id=$2)",payload.vehicle_id,payload.client_id):
+            raise HTTPException(422,"Техника не принадлежит выбранному клиенту")
+        try:
+            return dict(await c.fetchrow("""INSERT INTO service_appointments(client_id,vehicle_id,scheduled_at,
+             service_description,notes,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING *""",
+             payload.client_id,payload.vehicle_id,payload.scheduled_at,payload.service_description.strip(),
+             payload.notes,person["id"]))
+        except asyncpg.ForeignKeyViolationError:raise HTTPException(422,"Клиент не найден")
+
+@app.patch("/appointments/{appointment_id}/status")
+async def appointment_status(appointment_id:uuid.UUID,payload:ServiceStatus,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    allowed={"scheduled":{"arrived","cancelled"},"arrived":{"completed","cancelled"},"completed":set(),"cancelled":set()}
+    async with db.acquire() as c:
+        async with c.transaction():
+            current=await c.fetchrow("SELECT status FROM service_appointments WHERE id=$1 FOR UPDATE",appointment_id)
+            if not current:raise HTTPException(404,"Запись не найдена")
+            if payload.status not in allowed[current["status"]]:raise HTTPException(409,"Недопустимый переход")
+            return dict(await c.fetchrow("UPDATE service_appointments SET status=$2 WHERE id=$1 RETURNING *",appointment_id,payload.status))
+
+@app.get("/warranties")
+async def warranties_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("""SELECT w.*,r.order_number FROM service_warranties w
+            JOIN repair_orders r ON r.id=w.repair_id ORDER BY w.created_at DESC LIMIT 300""")]
+
+@app.post("/warranties",status_code=201)
+async def warranties_create(payload:WarrantyInput,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        try:return dict(await c.fetchrow("""INSERT INTO service_warranties(repair_id,complaint,created_by)
+          VALUES($1,$2,$3) RETURNING *""",payload.repair_id,payload.complaint.strip(),person["id"]))
+        except asyncpg.ForeignKeyViolationError:raise HTTPException(422,"Заказ-наряд не найден")
+
+@app.patch("/warranties/{claim_id}/status")
+async def warranty_status(claim_id:uuid.UUID,payload:ServiceStatus,person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    allowed={"open":{"review","rejected"},"review":{"resolved","rejected"},"resolved":set(),"rejected":set()}
+    async with db.acquire() as c:
+        async with c.transaction():
+            current=await c.fetchrow("SELECT status FROM service_warranties WHERE id=$1 FOR UPDATE",claim_id)
+            if not current:raise HTTPException(404,"Обращение не найдено")
+            if payload.status not in allowed[current["status"]]:raise HTTPException(409,"Недопустимый переход")
+            return dict(await c.fetchrow("UPDATE service_warranties SET status=$2 WHERE id=$1 RETURNING *",claim_id,payload.status))
