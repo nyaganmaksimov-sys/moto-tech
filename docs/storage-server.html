@@ -48,7 +48,7 @@ body:has(#mainSidebar:not(.hidden)) .server-dashboard{max-width:1450px;margin:0 
 #mainSidebar .side-link:focus-visible{outline:2px solid #f04b55;outline-offset:2px}
 #mainSidebar .side-link:disabled{opacity:.38;min-height:34px;padding:7px 12px}
 #mainSidebar .side-sep{margin-top:13px;border-top:1px solid #303847;padding:16px 12px 9px;text-transform:uppercase;letter-spacing:.08em}
-body:has(#mainSidebar:not(.hidden)) #procurementScreen,body:has(#mainSidebar:not(.hidden)) #inventoryScreen,body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:258px}
+body:has(#mainSidebar:not(.hidden)) #serviceOpsScreen,body:has(#mainSidebar:not(.hidden)) #procurementScreen,body:has(#mainSidebar:not(.hidden)) #inventoryScreen,body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:258px}
 body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 #systemTabs #openSystem,#systemTabs #openRepairs,#systemTabs #openStorage,#systemTabs #openEmployees{display:none}
 @media(max-width:850px){
@@ -70,8 +70,8 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <button data-target="employees" class="side-link">♙ Сотрудники</button>
 <div class="side-sep">Другие разделы</div>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">✓ Выданная техника</button>
-<button class="side-link" disabled title="Ожидает подключения к общей базе">◇ Гарантийные обращения</button>
-<button class="side-link" disabled title="Ожидает подключения к общей базе">▦ Запись и посты</button>
+<button class="side-link" data-target="warranties">◇ Гарантийные обращения</button>
+<button class="side-link" data-target="appointments">▦ Запись на сервис</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▥ Доска заказов</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">≡ Прайс-лист</button>
 <button class="side-link" data-target="fleet">◇ Клиенты и техника</button>
@@ -81,7 +81,7 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <button class="side-link" disabled title="Ожидает подключения к общей базе">₽ Финансы</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">⚙ Настройки</button>
 </aside>
-<section id="procurementScreen" class="hidden"><div class="server-dashboard"><h2 id="procurementTitle">Закупки</h2><div class="row dashboard-content">
+<section id="serviceOpsScreen" class="hidden"><div class="server-dashboard"><h2>Запись и гарантия</h2><div class="row dashboard-content"><section class="card"><h3>Записи клиентов</h3><div id="appointmentsList"></div><form id="appointmentCreate"><label>Клиент</label><select name="client_id" id="appointmentClient" required></select><label>Дата и время</label><input name="scheduled_at" type="datetime-local" required><label>Услуга / причина обращения</label><textarea name="service_description" required></textarea><button class="primary">Записать</button></form></section><section class="card"><h3>Гарантийные обращения</h3><div id="warrantiesList"></div><form id="warrantyCreate"><label>Заказ-наряд</label><select name="repair_id" id="warrantyRepair" required></select><label>Причина обращения</label><textarea name="complaint" required></textarea><button class="primary">Создать обращение</button></form></section></div></div></section><section id="procurementScreen" class="hidden"><div class="server-dashboard"><h2 id="procurementTitle">Закупки</h2><div class="row dashboard-content">
 <div class="card"><h3>Поставщики</h3><div id="supplierItems"></div><form id="supplierCreate"><label>Название поставщика</label><input name="name" required><label>Контактное лицо</label><input name="contact_person"><label>Телефон</label><input name="phone"><label>Email</label><input name="email" type="email"><button class="primary">Добавить поставщика</button></form></div>
 <div class="card"><h3>Заявки на запчасти</h3><div id="requestItems"></div><form id="partsRequestCreate"><label>Наименование детали</label><input name="part_name" required><label>Артикул</label><input name="sku"><label>Количество</label><input name="quantity" type="number" min="0.001" step="0.001" required><label>Поставщик</label><select name="supplier_id" id="reqSupplier"></select><label>UUID заказ-наряда (необязательно)</label><input name="repair_id"><label>Примечание</label><textarea name="notes"></textarea><button class="primary">Создать заявку</button></form></div></div></div></section><section id="inventoryScreen" class="hidden"><div class="server-dashboard"><h2>Склад и запчасти</h2><p class="muted">Остатки и операции хранятся в PostgreSQL</p>
 <div class="row dashboard-content"><section class="card"><h3>Остатки</h3><div id="stockItems"></div><h3>Последние движения</h3><div id="stockMovements"></div></section>
@@ -175,10 +175,10 @@ function setSignedIn(on){
  if(on){$('pinLogin').classList.add('hidden');$('pinSetup').classList.add('hidden')}
  $('systemTabs').classList.toggle('hidden',!on);
  $('mainSidebar').classList.toggle('hidden',!on);
- if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen','fleetScreen','inventoryScreen','procurementScreen'])$(id).classList.add('hidden');current=null}
+ if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen','fleetScreen','inventoryScreen','procurementScreen','serviceOpsScreen'])$(id).classList.add('hidden');current=null}
 }
 function switchSystem(view){
- const employees=view==='employees',storage=view==='storage',repairs=view==='repairs',home=view==='full',fleet=view==='fleet',inventory=view==='inventory',procurement=view==='requests'||view==='suppliers';
+ const employees=view==='employees',storage=view==='storage',repairs=view==='repairs',home=view==='full',fleet=view==='fleet',inventory=view==='inventory',procurement=view==='requests'||view==='suppliers',serviceOps=view==='appointments'||view==='warranties';
  $('fullSystem').classList.toggle('hidden',!(home||repairs));
  $('repairDashboardContent').classList.toggle('hidden',home);
  $('homeOrderCard').classList.toggle('hidden',!home);
@@ -188,6 +188,7 @@ function switchSystem(view){
  $('fleetScreen').classList.toggle('hidden',!fleet);
  $('inventoryScreen').classList.toggle('hidden',!inventory);
  $('procurementScreen').classList.toggle('hidden',!procurement);
+ $('serviceOpsScreen').classList.toggle('hidden',!serviceOps);
  for(const [id,active] of [['openSystem',home],['openRepairs',repairs],['openStorage',storage],['openEmployees',employees]])$(id).classList.toggle('active',active);
  document.querySelectorAll('#mainSidebar [data-target]').forEach(b=>b.classList.toggle('active',b.dataset.target===view));
  if(home||repairs)refreshRepairs().catch(e=>status(e.message));
@@ -195,7 +196,25 @@ function switchSystem(view){
  if(fleet)refreshFleet().catch(e=>status(e.message));
  if(inventory)refreshInventory().catch(e=>status(e.message));
  if(procurement){$('procurementTitle').textContent=view==='suppliers'?'Поставщики':'Заявки на запчасти';refreshProcurement().catch(e=>status(e.message))}
+ if(serviceOps)refreshServiceOps().catch(e=>status(e.message));
 }
+
+async function refreshServiceOps(){
+ const [clients,repairs,appointments,warranties]=await Promise.all([request('/clients'),request('/repairs'),request('/appointments'),request('/warranties')]);
+ const c=$('appointmentClient'),r=$('warrantyRepair'),a=$('appointmentsList'),w=$('warrantiesList');c.replaceChildren();r.replaceChildren();a.replaceChildren();w.replaceChildren();
+ for(const item of clients)c.add(new Option(item.full_name,item.id));
+ for(const item of repairs)r.add(new Option(item.order_number+' · '+item.brand+' '+item.model,item.id));
+ async function addStatus(holder,item,title,options,url){
+  const div=document.createElement('p');div.textContent=title+' · '+item.status;
+  for(const [next,label] of options){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=async()=>{try{await request(url+item.id+'/status',{method:'PATCH',body:{status:next}});await refreshServiceOps()}catch(err){status(err.message)}};div.append(b)}
+  holder.append(div);
+ }
+ for(const item of appointments){const transitions=item.status==='scheduled'?[['arrived','Прибыл'],['cancelled','Отменить']]:item.status==='arrived'?[['completed','Завершить']]:[];addStatus(a,item,item.client_name+' · '+new Date(item.scheduled_at).toLocaleString('ru-RU'),transitions,'/appointments/')}
+ for(const item of warranties){const transitions=item.status==='open'?[['review','На рассмотрение'],['rejected','Отклонить']]:item.status==='review'?[['resolved','Решено'],['rejected','Отклонить']]:[];addStatus(w,item,item.order_number+' · '+item.complaint,transitions,'/warranties/')}
+ if(!appointments.length)a.textContent='Записей пока нет';if(!warranties.length)w.textContent='Обращений пока нет';
+}
+$('appointmentCreate').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;try{const d=Object.fromEntries(new FormData(form).entries());d.scheduled_at=new Date(d.scheduled_at).toISOString();await request('/appointments',{method:'POST',body:d});form.reset();await refreshServiceOps();status('Запись создана')}catch(err){status(err.message)}};
+$('warrantyCreate').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;try{await request('/warranties',{method:'POST',body:Object.fromEntries(new FormData(form).entries())});form.reset();await refreshServiceOps();status('Обращение создано')}catch(err){status(err.message)}};
 async function refreshProcurement(){
  const [suppliers,requests]=await Promise.all([request('/suppliers'),request('/parts-requests')]);
  const a=$('supplierItems'),b=$('requestItems'),select=$('reqSupplier');a.replaceChildren();b.replaceChildren();select.replaceChildren();
