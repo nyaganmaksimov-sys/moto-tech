@@ -925,3 +925,44 @@ async def warranty_status(claim_id:uuid.UUID,payload:ServiceStatus,person=Depend
             if not current:raise HTTPException(404,"Обращение не найдено")
             if payload.status not in allowed[current["status"]]:raise HTTPException(409,"Недопустимый переход")
             return dict(await c.fetchrow("UPDATE service_warranties SET status=$2 WHERE id=$1 RETURNING *",claim_id,payload.status))
+
+class PriceInput(BaseModel):
+    category: str = Field(min_length=1,max_length=100)
+    name: str = Field(min_length=2,max_length=250)
+    price_rub: Decimal = Field(ge=0,le=100000000)
+
+class FinanceInput(BaseModel):
+    entry_type: str
+    amount_rub: Decimal = Field(gt=0,le=100000000)
+    category: str = Field(min_length=2,max_length=120)
+    description: str = Field(default="",max_length=2000)
+    repair_id: uuid.UUID | None = None
+
+@app.get("/price-items")
+async def price_items(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(x) for x in await c.fetch("SELECT * FROM service_price_items WHERE active=true ORDER BY category,name LIMIT 500")]
+
+@app.post("/price-items",status_code=201)
+async def add_price_item(payload:PriceInput,person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        return dict(await c.fetchrow("""INSERT INTO service_price_items(category,name,price_rub)
+                    VALUES($1,$2,$3) RETURNING *""",payload.category.strip(),payload.name.strip(),payload.price_rub))
+
+@app.get("/finance")
+async def finance_list(person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(x) for x in await c.fetch("""SELECT f.*,r.order_number FROM service_finance_entries f
+               LEFT JOIN repair_orders r ON r.id=f.repair_id ORDER BY f.created_at DESC LIMIT 500""")]
+
+@app.post("/finance",status_code=201)
+async def finance_add(payload:FinanceInput,person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    if payload.entry_type not in {"income","expense"}:raise HTTPException(422,"Неверный тип операции")
+    async with db.acquire() as c:
+        try:
+            return dict(await c.fetchrow("""INSERT INTO service_finance_entries
+               (entry_type,amount_rub,category,description,repair_id,recorded_by)
+               VALUES($1,$2,$3,$4,$5,$6) RETURNING *""",
+               payload.entry_type,payload.amount_rub,payload.category.strip(),
+               payload.description,payload.repair_id,person["id"]))
+        except asyncpg.ForeignKeyViolationError:raise HTTPException(422,"Заказ-наряд не найден")
