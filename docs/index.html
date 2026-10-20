@@ -697,7 +697,7 @@ function renderStorageBilling(){
  const el=$('storageBilling');if(!el)return;const draft=storageDraft(),orig=storageRecords.find(x=>x.id===storageEditingId),o={...draft,storagePayments:orig?.storagePayments||[]},m=storageMoneySummary(o);
  el.innerHTML='<h3>Расчёт стоимости хранения</h3><p class="hint">Расчёт за каждый календарный день, включая день приёма и день возврата. Тариф за день = месячная цена / число дней соответствующего месяца. До даты возврата расчёт предварительный.</p>'+
  (m.calc?'<p><b>'+m.calc.days+' дней · Хранение '+fmt(m.calc.total)+' · Всего '+fmt(m.total)+'</b> · Оплачено '+fmt(m.paid)+' · '+(m.balance>=0?'К доплате '+fmt(m.balance):'Переплата '+fmt(-m.balance))+'</p>':'<p class="muted">Укажите начало и планируемую дату возврата, чтобы увидеть расчёт</p>')+
- '<p><b>ТО перед выдачей:</b> '+storageEsc(o.preDeliveryService||'Не заказано')+' · '+fmt(m.serviceFee)+' (включается только после согласования)</p>'+ '<h4>Полученные платежи</h4>'+(o.storagePayments.length?o.storagePayments.map(p=>'<div class="line"><span>'+storageEsc(p.date)+' · '+storageEsc(p.method)+' · '+fmt(p.amount)+'</span><small>'+storageEsc(p.by||'')+'</small></div>').join(''):'<p class="muted">Платежей ещё нет</p>')+
+ '<p><b>ТО перед выдачей:</b> '+storageEsc(o.preDeliveryService||'Не заказано')+' · '+fmt(m.serviceFee)+' (включается только после согласования)</p>'+ storageMaintenancePanel()+'<h4>Полученные платежи</h4>'+(o.storagePayments.length?o.storagePayments.map(p=>'<div class="line"><span>'+storageEsc(p.date)+' · '+storageEsc(p.method)+' · '+fmt(p.amount)+'</span><small>'+storageEsc(p.by||'')+'</small></div>').join(''):'<p class="muted">Платежей ещё нет</p>')+
  '<div class="grid"><div><label>Сумма платежа, ₽</label><input type="number" id="storagePayAmount" min="0.01" step="0.01"></div><div><label>Способ оплаты</label><select id="storagePayMethod"><option>Наличные</option><option>Карта</option><option>Перевод</option></select></div></div><button onclick="addStoragePayment()">＋ Зафиксировать оплату</button>'
 }
 function addStoragePayment(){
@@ -708,6 +708,35 @@ function addStoragePayment(){
  o.storagePayments=o.storagePayments||[];o.storagePayments.push(payment);o.history=o.history||[];o.history.push({at:new Date().toISOString(),by:currentManagerName(),event:'Учёт оплаты хранения '+fmt(amount)});
  if(!storagePersist()){o.storagePayments.pop();o.history.pop();return}
  renderStorageBilling();renderStorage();alert('Оплата сохранена в демо-реестре. Это не фискальный чек.')
+}
+function storageMaintenancePanel(){
+ const o=storageRecords.find(x=>x.id===storageEditingId);if(!o)return '<p class="hint">Сохраните карточку, чтобы назначить ТО механику.</p>';
+ const task=o.maintenanceTask;
+ const people=(management.employees||[]).filter(e=>e.active!==false&&/механик/i.test(e.role||'')).map(e=>e.name);
+ const choices=[...new Set([...people,'Павел','Алексей','Андрей'])];
+ const checklist=['Проверка аккумулятора','Давление в шинах','Проверка тормозов','Проверка светотехники','Уровни жидкостей','Осмотр на течи','Контрольный запуск при допустимости'];
+ return '<div class="card"><h3>🔧 ТО перед выдачей — задание механику</h3>'+(task?'<p><b>Исполнитель:</b> '+storageEsc(task.mechanic)+' · <b>Статус:</b> '+storageEsc(task.status)+'</p><p class="muted">Задание № '+storageEsc(task.number)+'</p>'+checklist.map((item,i)=>'<label style="display:block;margin:9px 0"><input type="checkbox" id="mtCheck'+i+'" '+(task.checks?.[i]?'checked':'')+' '+(task.status==='Выполнено'?'disabled':'')+'> '+item+'</label>').join('')+'<textarea id="mtResult" placeholder="Заключение механика" '+(task.status==='Выполнено'?'disabled':'')+'>'+storageEsc(task.result||'')+'</textarea><div class="actions"><button onclick="saveStorageMaintenance(false)" '+(task.status==='Выполнено'?'disabled':'')+'>Сохранить проверки</button><button onclick="saveStorageMaintenance(true)" '+(task.status==='Выполнено'?'disabled':'')+'>✓ Завершить ТО</button></div>':'<p class="hint">Создайте задание после согласования услуги клиентом.</p><select id="mtMechanic">'+choices.map(n=>'<option>'+storageEsc(n)+'</option>').join('')+'</select><button onclick="createStorageMaintenance()">Назначить ТО</button>')+'</div>'
+}
+function createStorageMaintenance(){
+ const o=storageRecords.find(x=>x.id===storageEditingId);if(!o)return;
+ if(o.maintenanceTask)return alert('Задание уже создано');
+ if(!['Согласовано','Выполнено'].includes(o.preDeliveryService))return alert('Сначала сохраните согласование ТО с клиентом');
+ if(!verifyEmployeePin(currentManagerName(),'Назначение ТО перед выдачей'))return;
+ const mechanic=val('mtMechanic');if(!mechanic)return alert('Выберите механика');
+ o.maintenanceTask={number:'STO-'+o.contractNumber,mechanic,status:'Назначено',checks:[],result:'',createdAt:new Date().toISOString()};
+ o.history.push({at:new Date().toISOString(),by:currentManagerName(),event:'Назначено ТО: '+mechanic});
+ if(!storagePersist()){delete o.maintenanceTask;o.history.pop();return}renderStorageBilling();alert('ТО назначено механику '+mechanic)
+}
+function saveStorageMaintenance(finish){
+ const o=storageRecords.find(x=>x.id===storageEditingId),t=o?.maintenanceTask;if(!t||t.status==='Выполнено')return;
+ const checks=Array.from({length:7},(_,i)=>!!$('mtCheck'+i)?.checked);
+ if(finish&&checks.some(x=>!x))return alert('Перед завершением отметьте все проверки');
+ const name=t.mechanic;if(!verifyEmployeePin(name,finish?'Завершить ТО':'Сохранить чек-лист ТО'))return;
+ const old={...t};t.checks=checks;t.result=val('mtResult');t.status=finish?'Выполнено':'В работе';t.updatedAt=new Date().toISOString();
+ if(finish){o.preDeliveryService='Выполнено';o.history.push({at:t.updatedAt,by:name,event:'ТО перед выдачей выполнено'})}
+ if(!storagePersist()){o.maintenanceTask=old;if(finish)o.history.pop();return}
+ if($('sf_preDeliveryService'))$('sf_preDeliveryService').value=o.preDeliveryService;
+ renderStorageBilling();renderStorage();alert(finish?'ТО перед выдачей завершено':'Чек-лист сохранён')
 }
 function storagePersist(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(storageRecords));return true}catch(e){alert('Не удалось сохранить карточку хранения: переполнено хранилище');return false}}
 function storageDraft(){const obj={};for(const [key] of STORAGE_FIELDS){const el=$('sf_'+key);if(el)obj[key]=el.value.trim()}obj.status=storageRecords.find(x=>x.id===storageEditingId)?.status||'На хранении';return obj}
@@ -750,7 +779,7 @@ function printStorageDocument(kind){
  const html='<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>'+title+'</title>'+documentBrandStyle()+'</head><body><h1>MOTO TECH · '+title+'</h1>'+content+'<p class="print-footer">Документ сформирован в MOTO TECH Service. Распечатайте в двух экземплярах, проверьте реквизиты и подпишите с обеих сторон.</p></body></html>';
  const w=window.open('','_blank');if(!w)return alert('Разрешите всплывающие окна для печати');w.document.write(html);w.document.close();w.focus();w.print()
 }
-function markStorageReturned(){const o=storageRecords.find(x=>x.id===storageEditingId);if(!o)return;const date=val('sf_returnDate');if(!date)return alert('Укажите дату возврата');if(!verifyEmployeePin(currentManagerName(),'Возврат с хранения'))return;o.status='Возвращён';o.returnDate=date;o.returnCondition=val('sf_returnCondition');o.history.push({at:new Date().toISOString(),by:currentManagerName(),event:'Возврат мотоцикла'});if(storagePersist()){renderStorage();renderStorageBilling();alert('Возврат оформлен. Распечатайте акт возврата')}}
+function markStorageReturned(){const o=storageRecords.find(x=>x.id===storageEditingId);if(!o)return;if(o.maintenanceTask&&o.maintenanceTask.status!=='Выполнено'&&!confirm('ТО перед выдачей не завершено. Оформить возврат всё равно?'))return;const date=val('sf_returnDate');if(!date)return alert('Укажите дату возврата');if(!verifyEmployeePin(currentManagerName(),'Возврат с хранения'))return;o.status='Возвращён';o.returnDate=date;o.returnCondition=val('sf_returnCondition');o.history.push({at:new Date().toISOString(),by:currentManagerName(),event:'Возврат мотоцикла'});if(storagePersist()){renderStorage();renderStorageBilling();alert('Возврат оформлен. Распечатайте акт возврата')}}
 function renderAll(){renderStorage();renderNotifications();renderPriceApprovals();renderWarranty();renderHandovers();renderPartsJournal();renderManagement();renderAdmin();renderPayroll();renderProfit();renderOwnerSummary();renderWorkspaces();$('metrics').innerHTML=[['Всего заказов',orders.length],['В работе',orders.filter(x=>x.status==='В работе').length],['Готовы',orders.filter(x=>x.status==='Готов').length],['Сумма заказов',fmt(orders.reduce((s,x)=>s+x.total,0))]].map(x=>'<div class="metric"><span class="muted">'+x[0]+'</span><strong>'+x[1]+'</strong></div>').join('');renderOrders('recent',true);renderOrders('ordersTable');$('fleetTable').innerHTML=orders.length?'<table><tr><th>Клиент</th><th>Телефон</th><th>Тип</th><th>Марка / модель</th><th>VIN</th></tr>'+orders.map(o=>'<tr><td>'+clean(o.client)+'</td><td>'+clean(o.phone)+'</td><td>'+clean(o.type)+'</td><td>'+clean(o.brand+' '+o.model)+'</td><td>'+clean(o.vin)+'</td></tr>').join('')+'</table>':'<div class="empty">Клиенты появятся после создания первого заказа</div>'}
 async function scanVinPhoto(input){
  const result=$('vinResult'),preview=$('vinScanPreview'),file=input.files&&input.files[0];
