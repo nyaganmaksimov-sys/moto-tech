@@ -28,11 +28,31 @@ body:has(#signIn:not(.hidden)){background:radial-gradient(ellipse at 50% -12%,#2
 body:has(#signIn:not(.hidden)) main{max-width:1100px}
 body:has(#signIn:not(.hidden)) #status{max-width:450px;margin:12px auto;color:#f5a6a9;text-align:center}
 @media(max-width:540px){.login-card{margin:30px auto;padding:29px 22px}.login-card h2{font-size:25px}#pilotTag{display:none}#appHeader{height:68px}}
-.system-tabs{display:flex;gap:9px;align-items:center;padding:12px 24px;background:#141923;border-bottom:1px solid #303949}.system-tabs button.active{background:#c83742;border-color:#c83742}.system-tabs .profile-mini{margin-left:auto;color:#bfc7d3}.full-system-frame{display:block;width:100%;height:calc(100vh - 165px);min-height:640px;border:0;background:#10141b}.demo-warning{padding:10px 24px;color:#f0c47c;background:#2a251b;font-size:12px}body:has(#fullSystem:not(.hidden)) main{max-width:none;padding:0}body:has(#fullSystem:not(.hidden)) #workspace,body:has(#fullSystem:not(.hidden)) #detail{display:none}@media(max-width:650px){.system-tabs{flex-wrap:wrap}.system-tabs .profile-mini{width:100%;margin-left:0}.full-system-frame{height:calc(100vh - 200px)}}
+.system-tabs{display:flex;gap:9px;align-items:center;padding:12px 24px;background:#141923;border-bottom:1px solid #303949}.system-tabs button.active{background:#c83742;border-color:#c83742}.system-tabs .profile-mini{margin-left:auto;color:#bfc7d3}.full-system-frame{display:block;width:100%;height:calc(100vh - 165px);min-height:640px;border:0;background:#10141b}.demo-warning{padding:10px 24px;color:#f0c47c;background:#2a251b;font-size:12px}body:has(#fullSystem:not(.hidden)) main{max-width:none;padding:0}.server-dashboard{max-width:1280px;margin:0 auto;padding:24px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.metric{padding:20px;background:#202735;border-radius:12px;border:1px solid #3b4452}.metric strong{display:block;font-size:30px;margin-top:8px}.dashboard-content>*{min-width:320px;flex:1}.dashboard-content .card{max-height:none}@media(max-width:650px){.metrics{grid-template-columns:1fr}}body:has(#fullSystem:not(.hidden)) #workspace,body:has(#fullSystem:not(.hidden)) #detail{display:none}@media(max-width:650px){.system-tabs{flex-wrap:wrap}.system-tabs .profile-mini{width:100%;margin-left:0}.full-system-frame{height:calc(100vh - 200px)}}
 </style></head><body>
 <header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1><span id="pilotTag">TEST ENVIRONMENT</span></header>
-<nav id="systemTabs" class="system-tabs hidden"><button id="openSystem" type="button" class="active">Главная система</button><button id="openStorage" type="button">Серверное хранение</button><span id="staffMini" class="profile-mini"></span><button id="navLogout" type="button">Выйти</button></nav>
-<div id="fullSystem" class="hidden"><div class="demo-warning">Основная панель пока использует тестовые данные браузера. Реальные карточки хранения находятся в отдельном разделе «Серверное хранение».</div><iframe id="systemFrame" title="Основной интерфейс MOTO TECH" class="full-system-frame" loading="lazy"></iframe></div>
+<nav id="systemTabs" class="system-tabs hidden"><button id="openSystem" type="button" class="active">Рабочая панель</button><button id="openStorage" type="button">Серверное хранение</button><span id="staffMini" class="profile-mini"></span><button id="navLogout" type="button">Выйти</button></nav>
+<div id="fullSystem" class="hidden">
+ <div class="server-dashboard">
+  <div class="row"><div><h2>Панель управления</h2><p class="muted">Рабочие данные PostgreSQL · MOTO TECH</p></div><button type="button" id="reloadRepairs">Обновить данные</button></div>
+  <div class="metrics"><div class="metric">Заказ-наряды<strong id="ordersCount">—</strong></div><div class="metric">В ремонте<strong id="repairCount">—</strong></div><div class="metric">На хранении<strong id="storageCount">—</strong></div></div>
+  <div class="row dashboard-content">
+    <section class="card"><h3>Ремонтные заказ-наряды</h3><div id="repairItems" class="items"></div></section>
+    <section class="card"><h3>Новый заказ-наряд</h3><form id="repairCreate">
+     <label>Клиент</label><input name="client_name" required minlength="2" maxlength="250">
+     <label>Телефон</label><input name="phone" maxlength="80">
+     <label>Марка</label><input name="brand" required maxlength="150">
+     <label>Модель</label><input name="model" required maxlength="150">
+     <label>VIN / рама</label><input name="vin" maxlength="64">
+     <label>Жалоба клиента / причина обращения</label><textarea name="complaint" maxlength="5000"></textarea>
+     <label>Состояние при приёмке</label><textarea name="intake_condition" maxlength="5000"></textarea>
+     <label>Ответственный механик</label><input name="mechanic_name" maxlength="250">
+     <button class="primary" type="submit">Создать заказ на сервере</button>
+    </form></section>
+  </div>
+  <p class="notice">Учёт запчастей, полноценные фотоосмотры ремонта, финансы и сотрудники пока не перенесены в серверную версию. Для реальной работы с персональными данными необходимо завершить контроль доступа и документооборот.</p>
+ </div>
+</div>
 <main>
 <section class="card login-card" id="signIn">
  <div class="login-mark"><span class="mark-slash"></span><span>MT</span></div>
@@ -84,7 +104,7 @@ function status(message){$('status').textContent=message}
 function setSignedIn(on){
  $('signIn').classList.toggle('hidden',on);
  $('systemTabs').classList.toggle('hidden',!on);
- if(!on){$('workspace').classList.add('hidden');$('fullSystem').classList.add('hidden');$('detail').classList.add('hidden');$('systemFrame').src='about:blank';current=null}
+ if(!on){$('workspace').classList.add('hidden');$('fullSystem').classList.add('hidden');$('detail').classList.add('hidden');current=null}
 }
 function switchSystem(view){
  const main=view==='dashboard';
@@ -93,7 +113,7 @@ function switchSystem(view){
  $('detail').classList.toggle('hidden',main||!current);
  $('openSystem').classList.toggle('active',main);
  $('openStorage').classList.toggle('active',!main);
- if(main && $('systemFrame').getAttribute('src')!=='./dashboard.html')$('systemFrame').src='./dashboard.html';
+ if(main)refreshRepairs().catch(e=>status(e.message));
 }
 $('openSystem').onclick=()=>switchSystem('dashboard');
 $('openStorage').onclick=()=>switchSystem('storage');
@@ -136,6 +156,40 @@ async function refresh(){
  rows.forEach(item=>{let b=document.createElement('button');b.textContent=item.contract_number+' · '+item.brand_model+' · '+(statusRu[item.status]||item.status);b.onclick=()=>openRecord(item.id);$('records').append(b)});
 }
 $('refresh').onclick=()=>refresh().catch(e=>status(e.message));
+
+const repairStatusRu={accepted:'Принят',diagnostics:'Диагностика',repair:'В ремонте',ready:'Готов к выдаче',issued:'Выдан',cancelled:'Отменён'};
+let repairRows=[];
+async function refreshRepairs(){
+ const [orders,storages]=await Promise.all([request('/repairs'),request('/storage')]);
+ repairRows=orders;
+ $('ordersCount').textContent=orders.length;
+ $('repairCount').textContent=orders.filter(x=>['accepted','diagnostics','repair'].includes(x.status)).length;
+ $('storageCount').textContent=storages.filter(x=>x.status==='stored').length;
+ const box=$('repairItems');box.replaceChildren();
+ if(!orders.length){box.textContent='Заказов пока нет';return}
+ for(const item of orders){
+  const container=document.createElement('div');container.style.padding='10px 0';container.style.borderBottom='1px solid #394352';
+  const heading=document.createElement('div');heading.textContent=item.order_number+' · '+item.brand+' '+item.model+' · '+item.client_name;
+  const detail=document.createElement('small');detail.textContent=repairStatusRu[item.status]||item.status;
+  const select=document.createElement('select');select.style.marginTop='8px';select.setAttribute('aria-label','Изменить статус '+item.order_number);
+  const transitions={accepted:['diagnostics','cancelled'],diagnostics:['repair','ready','cancelled'],repair:['ready','cancelled'],ready:['issued','repair'],issued:[],cancelled:[]};
+  for(const st of [item.status,...transitions[item.status]]){
+   const op=document.createElement('option');op.value=st;op.textContent=repairStatusRu[st];select.append(op)
+  }
+  select.onchange=async()=>{try{await request('/repairs/'+item.id+'/status',{method:'PATCH',body:{status:select.value,version:item.version}});await refreshRepairs();status('Статус заказа обновлён на сервере.')}catch(e){status(e.message);await refreshRepairs()}};
+  container.append(heading,detail,select);box.append(container)
+ }
+}
+$('reloadRepairs').onclick=()=>refreshRepairs().catch(e=>status(e.message));
+$('repairCreate').onsubmit=async e=>{
+ e.preventDefault();const btn=e.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;
+ try{
+  const data=Object.fromEntries(new FormData(e.currentTarget).entries());
+  const result=await request('/repairs',{method:'POST',body:data});
+  e.currentTarget.reset();await refreshRepairs();status('Создан заказ '+result.order_number+' в PostgreSQL.')
+ }catch(err){status('Заказ не сохранён: '+err.message)}finally{btn.disabled=false}
+};
+
 $('create').onsubmit=async e=>{
  e.preventDefault();try{
  const data=Object.fromEntries(new FormData(e.target).entries());data.monthly_rate_rub=Number(data.monthly_rate_rub);
