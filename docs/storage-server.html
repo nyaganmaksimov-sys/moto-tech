@@ -473,7 +473,7 @@ $('refresh').onclick=()=>refresh().catch(e=>status(e.message));
 const repairStatusRu={accepted:'Принят',diagnostics:'Диагностика',repair:'В ремонте',ready:'Готов к выдаче',issued:'Выдан',cancelled:'Отменён'};
 let repairRows=[];
 async function refreshRepairs(){
- const [orders,storages]=await Promise.all([request('/repairs'),request('/storage')]);
+ const [orders,storages,employees]=await Promise.all([request('/repairs'),request('/storage'),request('/employees')]);
  repairRows=orders;
  $('ordersCount').textContent=orders.length;
  $('repairCount').textContent=orders.filter(x=>['accepted','diagnostics','repair'].includes(x.status)).length;
@@ -493,7 +493,21 @@ async function refreshRepairs(){
    const op=document.createElement('option');op.value=st;op.textContent=repairStatusRu[st];select.append(op)
   }
   select.onchange=async()=>{try{await request('/repairs/'+item.id+'/status',{method:'PATCH',body:{status:select.value,version:item.version}});await refreshRepairs();status('Статус заказа обновлён на сервере.')}catch(e){status(e.message);await refreshRepairs()}};
-  container.append(heading,detail,select);box.append(container)
+  container.append(heading,detail,select);
+  if(['owner_manager','administrator','manager'].includes(staffRole)&&!['issued','cancelled'].includes(item.status)){
+   const label=document.createElement('label');label.textContent='Ответственный механик';
+   const mechanic=document.createElement('select');mechanic.setAttribute('aria-label','Механик '+item.order_number);
+   mechanic.add(new Option('Не назначен',''));
+   for(const employee of employees.filter(x=>x.active!==false)){mechanic.add(new Option(employee.full_name+' · '+(employee.position||employee.role),employee.id))}
+   mechanic.value=item.mechanic_id||'';
+   mechanic.onchange=async()=>{
+    mechanic.disabled=true;
+    try{await request('/repairs/'+item.id+'/mechanic',{method:'PATCH',body:{mechanic_id:mechanic.value||null,version:item.version}});await refreshRepairs();status('Ответственный за ремонт назначен')}
+    catch(err){status(err.message);await refreshRepairs()}
+   };
+   container.append(label,mechanic)
+  }
+  box.append(container)
  }
 }
 $('reloadRepairs').onclick=()=>refreshRepairs().catch(e=>status(e.message));
