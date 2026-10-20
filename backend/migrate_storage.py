@@ -65,6 +65,13 @@ async def run():
                 if not exists:
                     raise RuntimeError("Missing required table: " + table)
             print("Repair order schema checks passed")
+            has_position = await connection.fetchval("""SELECT EXISTS(
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name='service_employees' AND column_name='position')""")
+            if not has_position:
+                await connection.execute((base / "004_employee_positions.sql").read_text(encoding="utf-8"))
+                print("Applied: 004_employee_positions.sql")
+            print("Employee schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
