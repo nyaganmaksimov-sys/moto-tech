@@ -271,6 +271,8 @@ function initializePinEntry(){
 }
 function showPinSetup(){
  $('signIn').classList.add('hidden');$('pinLogin').classList.add('hidden');$('pinSetup').classList.remove('hidden');
+ $('systemTabs').classList.add('hidden');$('mainSidebar').classList.add('hidden');
+ for(const id of ['fullSystem','workspace','detail','employeesScreen','fleetScreen'])$(id).classList.add('hidden');
  $('pinSetup').scrollIntoView({block:'center'});
  status('Задайте PIN из 6 цифр, чтобы входить с этого устройства без пароля.');
 }
@@ -299,7 +301,9 @@ $('pinSetupForm').onsubmit=async e=>{
  const button=e.currentTarget.querySelector('button');button.disabled=true;
  try{
   const result=await request('/auth/pin/enroll',{method:'POST',body:{pin,label:'Основной браузер'}});
+  const old=loadPinDevice();
   localStorage.setItem(PIN_DEVICE_KEY,JSON.stringify({token:result.device_token,username:authProfile.username}));
+  if(old?.token){request('/auth/pin/revoke',{method:'POST',body:{device_token:old.token}}).catch(()=>{})}
   e.currentTarget.reset();await enterWorkspace(authProfile);
  }catch(err){status('PIN не сохранён: '+err.message)}
  finally{button.disabled=false}
