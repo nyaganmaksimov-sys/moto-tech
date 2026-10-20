@@ -524,6 +524,33 @@ async def update_repair_status(repair_id:uuid.UUID,payload:RepairOrderState,
 async def list_employees(person=Depends(require_roles(*ROLES)), db=Depends(database)):
     """List employees without password hashes or credential material."""
     async with db.acquire() as c:
-        rows = await c.fetch("""SELECT id,username,full_name,role,active,created_at
+        rows = await c.fetch("""SELECT id,username,full_name,position,role,active,created_at
                                 FROM service_employees ORDER BY full_name""")
     return [dict(row) for row in rows]
+
+class EmployeeCreate(BaseModel):
+    username: str = Field(min_length=3,max_length=40,pattern=r"^[a-z][a-z0-9._-]*$")
+    password: str = Field(min_length=14,max_length=128)
+    full_name: str = Field(min_length=3,max_length=250)
+    position: str = Field(min_length=2,max_length=150)
+    role: str
+
+@app.post("/employees",status_code=201)
+async def create_employee(payload:EmployeeCreate,
+    person=Depends(require_roles("owner_manager","administrator")),db=Depends(database)):
+    if payload.role not in ROLES:
+        raise HTTPException(422,"Invalid employee role")
+    if payload.role == "owner_manager" and person["role"] != "owner_manager":
+        raise HTTPException(403,"Only owner may grant owner role")
+    hashed = await run_in_threadpool(password_hash.hash,payload.password)
+    async with db.acquire() as c:
+        try:
+            employee = await c.fetchrow("""INSERT INTO service_employees
+             (username,password_hash,full_name,position,role,active)
+             VALUES($1,$2,$3,$4,$5,true)
+             RETURNING id,username,full_name,position,role,active,created_at""",
+             payload.username,hashed,payload.full_name.strip(),
+             payload.position.strip(),payload.role)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409,"Такой логин уже используется")
+    return dict(employee)
