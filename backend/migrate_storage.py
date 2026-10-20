@@ -39,7 +39,23 @@ async def run():
                 exists = await connection.fetchval("SELECT to_regclass($1)", "public." + table)
                 if not exists:
                     raise RuntimeError("Missing required table: " + table)
-            print("Storage migration table checks passed")
+            required_columns = {
+                "storage_contracts": ("id", "contract_number", "owner_name", "vin", "status", "version"),
+                "storage_photos": ("contract_id", "kind", "object_key", "sha256"),
+                "storage_events": ("contract_id", "event_type", "actor_id"),
+                "service_employees": ("username", "password_hash", "role", "active"),
+            }
+            for table, columns in required_columns.items():
+                present = {
+                    row["column_name"] for row in await connection.fetch(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema='public' AND table_name=$1", table
+                    )
+                }
+                missing = set(columns) - present
+                if missing:
+                    raise RuntimeError(f"Table {table} missing columns: {sorted(missing)}")
+            print("Storage migration schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
