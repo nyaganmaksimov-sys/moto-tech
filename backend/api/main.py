@@ -966,3 +966,32 @@ async def finance_add(payload:FinanceInput,person=Depends(require_roles("owner_m
                payload.entry_type,payload.amount_rub,payload.category.strip(),
                payload.description,payload.repair_id,person["id"]))
         except asyncpg.ForeignKeyViolationError:raise HTTPException(422,"Заказ-наряд не найден")
+
+# Integration remains deliberately disabled until the actual 1C configuration,
+# authentication scheme, and exchange contract have been agreed upon.
+class OneCSettingsInput(BaseModel):
+    configuration: str = Field(min_length=2,max_length=120)
+
+@app.get("/integrations/1c")
+async def get_1c_settings(person=Depends(require_roles("owner_manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        row=await c.fetchrow("""SELECT configuration,mode,updated_at
+          FROM integration_1c_settings WHERE id=1""")
+        logs=await c.fetch("""SELECT direction,entity_type,state,details,created_at
+          FROM integration_1c_events ORDER BY id DESC LIMIT 30""")
+    return {"settings":dict(row) if row else {"configuration":"not_selected","mode":"disabled"},
+            "recent_events":[dict(x) for x in logs],
+            "connected":False,
+            "message":"Обмен с 1С отключён до настройки поддерживаемой конфигурации и защищённого подключения"}
+
+@app.put("/integrations/1c")
+async def update_1c_settings(payload:OneCSettingsInput,
+    person=Depends(require_roles("owner_manager")),db=Depends(database)):
+    async with db.acquire() as c:
+        row=await c.fetchrow("""INSERT INTO integration_1c_settings
+         (id,configuration,mode,updated_by,updated_at)
+         VALUES(1,$1,'disabled',$2,now())
+         ON CONFLICT(id) DO UPDATE SET configuration=EXCLUDED.configuration,
+         mode='disabled',updated_by=EXCLUDED.updated_by,updated_at=now()
+         RETURNING configuration,mode,updated_at""",payload.configuration.strip(),person["id"])
+    return dict(row)
