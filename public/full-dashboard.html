@@ -858,7 +858,23 @@ function printStorageDocument(kind){
  if(kind==='act')content='<p>К договору хранения № '+e(o.contractNumber)+' от '+fmtDate(o.date)+' · г. Москва</p>'+parties+'<h2>1. Сведения о мотоцикле</h2>'+details+'<h2>2. Состояние техники на момент приёма</h2><p>Кузов / ЛКП: '+e(o.conditionBody)+'</p><p>Шины, колёса, светотехника: '+e(o.conditionWheels)+'</p><p>Иные дефекты: '+e(o.conditionOther)+'</p><p>Топливо / АКБ: '+e(o.fuel)+'</p><p>Фотоматериалы: '+(o.photos?.length||0)+' фото</p><h2>3. Комплектность и имущество</h2><p>Ключи: '+e(o.keys)+'; дополнительные: '+e(o.extraKeys)+'</p><p>Аксессуары: '+e(o.accessories)+'</p><p>Документы: '+e(o.documents)+'</p><h2>4. Условия приёма</h2><p>С '+fmtDate(o.startDate)+'; '+e(o.rate)+' руб. за каждый месяц хранения. Место: '+e(o.location)+'. Остальные условия определены договором хранения.</p>'+serviceLine+sig;
  else if(kind==='return')content='<p>К договору хранения № '+e(o.contractNumber)+' · '+fmtDate(o.returnDate||localISODate())+'</p>'+parties+details+'<h2>Состояние на момент возврата</h2><p>'+e(o.returnCondition||'_________________________________')+'</p><p>Стороны фиксируют передачу мотоцикла и перечисленного имущества обратно поклажедателю. Замечания и взаиморасчёты указываются при подписании.</p>'+sig;
  else content='<p>г. Москва · '+fmtDate(o.date)+' · № '+e(o.contractNumber)+'</p>'+parties+'<h2>1. Предмет договора</h2><p>Хранитель принимает на хранение транспортное средство, указанное ниже, и обязуется возвратить его поклажедателю. Состояние и комплектность определяются актом приёма-передачи.</p>'+details+'<h2>2. Срок и место хранения</h2><p>С '+fmtDate(o.startDate)+' по '+fmtDate(o.endDate)+'. Место: '+e(o.location)+'</p><h2>3. Вознаграждение и расчёты</h2><p>'+e(o.rate)+' руб. в месяц. '+e(o.paymentTerms||DEFAULT_STORAGE_PAYMENT_TERMS)+'</p><h2>4. Прочие условия</h2><p>'+e(o.specialTerms||'Дополнительные условия согласовываются сторонами.')+'</p><p><b>ВНИМАНИЕ: ПРОЕКТ.</b> Перед использованием необходимо утвердить правовые условия, ответственность, возврат и порядок расчётов.</p>'+sig;
- const html='<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>'+title+'</title>'+documentBrandStyle()+'</head><body><h1>MOTO TECH · '+title+'</h1>'+content+'<p class="print-footer">Документ сформирован в MOTO TECH Service. Распечатайте в двух экземплярах, проверьте реквизиты и подпишите с обеих сторон.</p></body></html></body></html>';
+ const html='<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>'+title+'</title>'+documentBrandStyle()+'</head><body><h1>MOTO TECH · '+title+'</h1>'+content+'<p class="print-footer">Документ сформирован в MOTO TECH Service. Распечатайте в двух экземплярах, проверьте реквизиты и подпишите с обеих сторон.</p><script>
+(function(){
+ 'use strict';
+ // The parent owns the authenticated API token; the legacy dashboard never receives it.
+ const links={intake:'repairs',orders:'repairs',handovers:'repairs',board:'repairs',storage:'storage'};
+ document.addEventListener('click',function(e){
+  const btn=e.target.closest('button[onclick]');
+  if(!btn)return;
+  const action=btn.getAttribute('onclick')||'';
+  const match=action.match(/^view\('([^']+)'\s*,\s*this\)$/);
+  if(!match||!links[match[1]])return;
+  if(window.parent===window)return;
+  e.preventDefault();e.stopImmediatePropagation();
+  window.parent.postMessage({type:'mototech:navigate',section:links[match[1]]},window.location.origin);
+ },true);
+})();
+</script></body></html></body></html>';
  const w=window.open('','_blank');if(!w)return alert('Разрешите всплывающие окна для печати');w.document.write(html);w.document.close();w.focus();w.print()
 }
 function markStorageReturned(){const o=storageRecords.find(x=>x.id===storageEditingId);if(!o)return;if(o.maintenanceTask&&o.maintenanceTask.status!=='Выполнено'&&!confirm('ТО перед выдачей не завершено. Оформить возврат всё равно?'))return;const date=val('sf_returnDate');if(!date)return alert('Укажите дату возврата');if(!verifyEmployeePin(currentManagerName(),'Возврат с хранения'))return;o.status='Возвращён';o.returnDate=date;o.returnCondition=val('sf_returnCondition');o.history.push({at:new Date().toISOString(),by:currentManagerName(),event:'Возврат мотоцикла'});if(storagePersist()){renderStorage();renderStorageBilling();alert('Возврат оформлен. Распечатайте акт возврата')}}
