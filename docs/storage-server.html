@@ -27,7 +27,7 @@
 <p><button class="primary" type="submit">Сохранить черновик</button></p></form></div></div>
 </section>
 <section class="card hidden" id="detail">
-<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p><div id="detailsGrid" class="info-grid"></div><div class="doc-actions"><button type="button" onclick="printStoragePaper('intake')">Печать акта приёмки</button><button type="button" onclick="printStoragePaper('agreement')">Договор хранения (проект)</button><button type="button" onclick="printStoragePaper('return')">Акт выдачи</button></div>
+<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p><div id="detailsGrid" class="info-grid"></div><details id="editCard"><summary>Редактировать карточку (управляющий)</summary><form id="editCardForm"><div id="editInputs"></div><button type="submit" class="primary">Сохранить изменения</button></form></details><div class="doc-actions"><button type="button" onclick="printStoragePaper('intake')">Печать акта приёмки</button><button type="button" onclick="printStoragePaper('agreement')">Договор хранения (проект)</button><button type="button" onclick="printStoragePaper('return')">Акт выдачи</button></div>
 <p>Для приёмки нужны фото: спереди, сзади, слева, справа и VIN. Повреждения снимайте отдельно.</p>
 <form id="upload"><div class="row"><div><label>Тип фотографии</label><select name="kind"><option value="front">Спереди</option><option value="rear">Сзади</option><option value="left">Слева</option><option value="right">Справа</option><option value="vin">VIN</option><option value="dashboard">Приборная панель</option><option value="damage">Повреждение</option><option value="pts">ПТС</option><option value="other">Другое</option></select></div>
 <div><label>Описание / место повреждения</label><input name="note" maxlength="2000"></div><div><label>Фото</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></div></div>
@@ -84,6 +84,28 @@ function renderDetailGrid(){
  const grid=$('detailsGrid');grid.replaceChildren();
  for(const [label,value] of fields){const item=document.createElement('div'),small=document.createElement('small'),content=document.createElement('span');small.textContent=label;content.textContent=String(value||'—');item.append(small,content);grid.append(item)}
 }
+function renderEditForm(){
+ const section=$('editCard'),root=$('editInputs');root.replaceChildren();
+ section.classList.toggle('hidden',current.status==='returned');
+ const fields=[['owner_name','Владелец'],['owner_phone','Телефон'],['brand_model','Марка и модель'],['plate','Госномер'],['location_label','Место хранения'],['monthly_rate_rub','Тариф, ₽ / месяц'],['body_condition','Состояние при приёмке'],['damage_description','Повреждения']];
+ for(const [key,title] of fields){
+  const label=document.createElement('label');label.textContent=title;
+  const control=key==='body_condition'||key==='damage_description'?document.createElement('textarea'):document.createElement('input');
+  control.name=key;control.value=current[key]??'';
+  if(key==='monthly_rate_rub'){control.type='number';control.step='0.01';control.min='0'}
+  if(['owner_name','brand_model','body_condition','monthly_rate_rub'].includes(key))control.required=true;
+  label.append(control);root.append(label);
+ }
+}
+$('editCardForm').onsubmit=async event=>{
+ event.preventDefault();if(!current||current.status==='returned')return;
+ const data=Object.fromEntries(new FormData(event.currentTarget).entries());
+ data.version=current.version;data.monthly_rate_rub=Number(data.monthly_rate_rub);
+ try{
+  await request('/storage/'+current.id,{method:'PATCH',body:data});
+  await openRecord(current.id);await refresh();status('Карточка обновлена в PostgreSQL.');
+ }catch(e){status('Ошибка редактирования: '+e.message)}
+};
 function printStoragePaper(kind){
  if(!current)return;
  if(kind==='return'&&current.status!=='returned'){status('Акт выдачи доступен только после оформления возврата.');return;}
@@ -115,14 +137,16 @@ async function openRecord(id){
   current=await request('/storage/'+encodeURIComponent(id));$('detail').classList.remove('hidden');
   $('detailName').textContent='Договор '+current.contract_number+' · '+current.brand_model;
   $('detailMeta').textContent=(statusRu[current.status]||current.status)+' · VIN '+current.vin+' · версия '+current.version;
-  renderDetailGrid();
+  renderDetailGrid();renderEditForm();
   clearPhotoUrls();$('photos').replaceChildren();
   const detailId=current.id;
   for(const photo of current.photos){
     const figure=document.createElement('figure'),img=document.createElement('img'),caption=document.createElement('figcaption');
     img.alt='Фото '+(kindRu[photo.kind]||photo.kind);
     caption.textContent=(kindRu[photo.kind]||photo.kind)+(photo.note?' · '+photo.note:'');
-    figure.append(img,caption);$('photos').append(figure);
+    figure.append(img,caption);
+    if(current.status==='draft'){const del=document.createElement('button');del.textContent='Убрать';del.type='button';del.onclick=async()=>{if(!confirm('Убрать фото из черновика? Запись о действии сохранится.'))return;try{await request('/storage/'+detailId+'/photos/'+photo.id,{method:'DELETE'});await openRecord(detailId);status('Фото исключено из черновика.')}catch(e){status(e.message)}};figure.append(del)}
+    $('photos').append(figure);
     requestPhoto(detailId,photo.id,img,photoGalleryGeneration).catch(()=>{if(img.isConnected)caption.textContent+=' · не удалось получить фото'});
   }
   const kinds=new Set(current.photos.map(p=>p.kind));
