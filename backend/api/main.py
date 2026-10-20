@@ -457,3 +457,65 @@ async def accept_storage(
     return dict(updated)
 
 # Employee provisioning remains an administrator-only offline operation.
+
+class RepairOrderCreate(BaseModel):
+    client_name: str = Field(min_length=2,max_length=250)
+    phone: str | None = Field(default=None,max_length=80)
+    vehicle_type: str = Field(default="Мотоцикл",max_length=100)
+    brand: str = Field(min_length=1,max_length=150)
+    model: str = Field(min_length=1,max_length=150)
+    vin: str | None = Field(default=None,max_length=64)
+    mileage_km: Decimal | None = Field(default=None,ge=0)
+    mechanic_name: str | None = Field(default=None,max_length=250)
+    complaint: str = Field(default="",max_length=5000)
+    intake_condition: str = Field(default="",max_length=5000)
+    total_rub: Decimal = Field(default=Decimal("0"),ge=0,le=100000000)
+
+class RepairOrderState(BaseModel):
+    status: str
+    version: int = Field(ge=1)
+
+@app.get("/repairs")
+async def get_repairs(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(row) for row in await c.fetch("""SELECT * FROM repair_orders
+                        ORDER BY updated_at DESC LIMIT 300""")]
+
+@app.post("/repairs",status_code=201)
+async def create_repair(payload:RepairOrderCreate,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        async with c.transaction():
+            number = await c.fetchval("SELECT nextval('repair_order_number_seq')")
+            order_number = "MT-" + str(number).zfill(6)
+            row = await c.fetchrow("""INSERT INTO repair_orders
+                 (order_number,client_name,phone,vehicle_type,brand,model,vin,mileage_km,
+                  mechanic_name,complaint,intake_condition,total_rub,created_by,updated_by)
+                 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)
+                 RETURNING *""",
+                 order_number,payload.client_name.strip(),payload.phone,payload.vehicle_type,
+                 payload.brand.strip(),payload.model.strip(),payload.vin,payload.mileage_km,
+                 payload.mechanic_name,payload.complaint,payload.intake_condition,
+                 payload.total_rub,person["id"])
+            await c.execute("""INSERT INTO repair_order_events(order_id,actor_id,event_type)
+                                  VALUES($1,$2,'created')""",row["id"],person["id"])
+    return dict(row)
+
+@app.patch("/repairs/{repair_id}/status")
+async def update_repair_status(repair_id:uuid.UUID,payload:RepairOrderState,
+    person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    allowed={"accepted":["diagnostics","cancelled"],"diagnostics":["repair","ready","cancelled"],
+             "repair":["ready","cancelled"],"ready":["issued","repair"],"issued":[],"cancelled":[]}
+    async with db.acquire() as c:
+        async with c.transaction():
+            old=await c.fetchrow("SELECT status,version FROM repair_orders WHERE id=$1 FOR UPDATE",repair_id)
+            if not old:raise HTTPException(404,"Repair order not found")
+            if old["version"]!=payload.version:raise HTTPException(409,"Order changed; refresh")
+            if payload.status not in allowed[old["status"]]:raise HTTPException(409,"Invalid status change")
+            row=await c.fetchrow("""UPDATE repair_orders SET status=$2,version=version+1,
+                   updated_at=now(),updated_by=$3 WHERE id=$1 RETURNING id,status,version""",
+                   repair_id,payload.status,person["id"])
+            await c.execute("""INSERT INTO repair_order_events(order_id,actor_id,event_type,payload)
+                     VALUES($1,$2,'status_changed',$3::jsonb)""",repair_id,person["id"],
+                     json.dumps({"from":old["status"],"to":payload.status}))
+    return dict(row)
+
