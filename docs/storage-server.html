@@ -489,6 +489,33 @@ async function showRepairWorks(orderId,holder){
  const summary=document.createElement('p');summary.textContent='Стоимость работ: '+total.toFixed(2)+' ₽';holder.append(summary)
  }catch(err){holder.textContent='Ошибка загрузки работ: '+err.message}
 }
+async function showRepairStatement(orderId,holder){
+ holder.textContent='Загрузка расчёта…';
+ try{
+  const data=await request('/repairs/'+orderId+'/statement');
+  holder.replaceChildren();
+  const order=data.order,t=data.totals;
+  const h=document.createElement('h3');h.textContent='Заказ '+order.order_number;holder.append(h);
+  const lines=[
+   'Клиент: '+order.client_name,
+   'Техника: '+order.brand+' '+order.model,
+   'Работы: '+Number(t.works).toFixed(2)+' ₽',
+   'Запчасти: '+Number(t.parts).toFixed(2)+' ₽',
+   'Итого: '+Number(t.payable).toFixed(2)+' ₽'
+  ];
+  if(t.paid!==null){lines.push('Учтённые оплаты: '+Number(t.paid).toFixed(2)+' ₽');lines.push('Остаток: '+Number(t.balance).toFixed(2)+' ₽')}
+  for(const line of lines){const p=document.createElement('p');p.textContent=line;holder.append(p)}
+  const note=document.createElement('small');note.textContent=data.note;holder.append(note);
+  const print=document.createElement('button');print.type='button';print.textContent='Печать расчёта';print.onclick=()=>{
+    const section=document.createElement('section');section.style.cssText='font:16px Arial,sans-serif;color:black;background:white;padding:30px';
+    const title=document.createElement('h2');title.textContent='MOTO TECH · Предварительный расчёт '+order.order_number;section.append(title);
+    for(const line of lines){const p=document.createElement('p');p.textContent=line;section.append(p)}
+    const n=document.createElement('p');n.textContent=data.note;section.append(n);
+    const win=window.open('','_blank');if(!win){status('Разрешите всплывающие окна для печати');return}
+    win.document.title='Расчёт '+order.order_number;win.document.body.append(section);win.print();
+  };holder.append(print)
+ }catch(err){holder.textContent='Не удалось получить расчёт: '+err.message}
+}
 async function refreshMyRepairs(){
  const list=$('myRepairsList');list.replaceChildren();const orders=await request('/repairs/mine');
  if(!orders.length){list.textContent='На вас пока нет назначенных ремонтов';return}
@@ -535,7 +562,8 @@ async function refreshRepairs(){
   }
   const worksBtn=document.createElement('button');worksBtn.type='button';worksBtn.textContent='Работы и стоимость';const workPanel=document.createElement('div');worksBtn.onclick=()=>showRepairWorks(item.id,workPanel);
   const addWork=document.createElement('button');addWork.type='button';addWork.textContent='Добавить работу';addWork.disabled=['issued','cancelled'].includes(item.status);addWork.onclick=()=>addRepairWork(item.id);
-  container.append(worksBtn,addWork,workPanel);box.append(container)
+  const estimateBtn=document.createElement('button');estimateBtn.type='button';estimateBtn.textContent='Расчёт заказа';const estimate=document.createElement('div');estimateBtn.onclick=()=>showRepairStatement(item.id,estimate);
+  container.append(worksBtn,addWork,workPanel,estimateBtn,estimate);box.append(container)
  }
 }
 $('reloadRepairs').onclick=()=>refreshRepairs().catch(e=>status(e.message));
