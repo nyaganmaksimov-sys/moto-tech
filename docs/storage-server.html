@@ -123,6 +123,11 @@ function switchSystem(view){
  if(full && $('fullDashboardFrame').getAttribute('src')!=='./full-dashboard.html')$('fullDashboardFrame').src='./full-dashboard.html';
  if(repairs)refreshRepairs().catch(e=>status(e.message));
 }
+window.addEventListener('message',event=>{
+ if(event.origin!==window.location.origin || event.source!==$('fullDashboardFrame').contentWindow || !token)return;
+ if(!event.data || event.data.type!=='mototech:navigate')return;
+ if(event.data.section==='repairs'||event.data.section==='storage')switchSystem(event.data.section);
+});
 $('openSystem').onclick=()=>switchSystem('full');
 $('openRepairs').onclick=()=>switchSystem('repairs');
 $('openStorage').onclick=()=>switchSystem('storage');
