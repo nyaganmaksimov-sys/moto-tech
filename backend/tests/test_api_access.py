@@ -21,8 +21,8 @@ class AccessTests(unittest.TestCase):
     def test_no_public_account_registration(self):
         self.assertEqual(self.client.post("/auth/register", json={}).status_code, 404)
 
-    def test_no_unverified_photo_endpoint(self):
-        self.assertEqual(self.client.post("/storage/00000000-0000-0000-0000-000000000000/photos", json={}).status_code, 404)
+    def test_photo_endpoint_is_not_public(self):
+        self.assertEqual(self.client.post("/storage/00000000-0000-0000-0000-000000000000/photos", json={}).status_code, 503)
 
     def test_handover_requires_backend(self):
         ident = "00000000-0000-0000-0000-000000000000"
