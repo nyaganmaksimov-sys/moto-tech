@@ -732,3 +732,63 @@ async def update_vehicle(vehicle_id:uuid.UUID,payload:VehicleCreate,
             raise HTTPException(422,"Владелец не найден")
         if not row:raise HTTPException(404,"Техника не найдена")
     return dict(row)
+
+class InventoryPartCreate(BaseModel):
+    sku: str = Field(min_length=1,max_length=100)
+    name: str = Field(min_length=2,max_length=250)
+    unit: str = Field(default="шт",max_length=20)
+    purchase_price: Decimal = Field(default=Decimal("0"),ge=0)
+    sale_price: Decimal = Field(default=Decimal("0"),ge=0)
+
+class InventoryMovementCreate(BaseModel):
+    part_id: uuid.UUID
+    delta: Decimal
+    reason: str = Field(min_length=3,max_length=500)
+    repair_id: uuid.UUID | None = None
+
+@app.get("/inventory")
+async def list_inventory(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("SELECT * FROM inventory_parts ORDER BY name LIMIT 500")]
+
+@app.post("/inventory",status_code=201)
+async def create_inventory_part(payload:InventoryPartCreate,
+    person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        try:
+            row=await c.fetchrow("""INSERT INTO inventory_parts(sku,name,unit,purchase_price,sale_price)
+                VALUES($1,$2,$3,$4,$5) RETURNING *""",payload.sku.strip(),payload.name.strip(),
+                payload.unit.strip(),payload.purchase_price,payload.sale_price)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409,"Артикул уже существует")
+    return dict(row)
+
+@app.post("/inventory/movements",status_code=201)
+async def change_inventory(payload:InventoryMovementCreate,
+    person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    if payload.delta==0 or payload.delta.as_tuple().exponent < -3:
+        raise HTTPException(422,"Количество должно быть ненулевым, точность до 0.001")
+    if payload.repair_id and payload.delta>0:
+        raise HTTPException(422,"Привязка к заказу разрешена только для списания")
+    async with db.acquire() as c:
+        async with c.transaction():
+            if payload.repair_id and not await c.fetchval("SELECT EXISTS(SELECT 1 FROM repair_orders WHERE id=$1)",payload.repair_id):
+                raise HTTPException(404,"Заказ не найден")
+            part=await c.fetchrow("""UPDATE inventory_parts SET quantity=quantity+$2
+                 WHERE id=$1 AND quantity+$2>=0 RETURNING id,quantity""",
+                 payload.part_id,payload.delta)
+            if not part:
+                raise HTTPException(409,"Запчасть не найдена или недостаточно остатка")
+            movement=await c.fetchrow("""INSERT INTO inventory_movements
+                 (part_id,employee_id,repair_id,delta,reason) VALUES($1,$2,$3,$4,$5)
+                 RETURNING id,part_id,repair_id,delta,reason,created_at""",
+                 payload.part_id,person["id"],payload.repair_id,payload.delta,payload.reason.strip())
+    return {"part":dict(part),"movement":dict(movement)}
+
+@app.get("/inventory/movements")
+async def list_inventory_movements(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("""SELECT m.id,m.part_id,p.name AS part_name,
+            m.repair_id,m.delta,m.reason,m.created_at
+            FROM inventory_movements m JOIN inventory_parts p ON p.id=m.part_id
+            ORDER BY m.created_at DESC LIMIT 200""")]
