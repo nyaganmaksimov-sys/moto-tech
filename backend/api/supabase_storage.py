@@ -51,3 +51,12 @@ def remove_private_image(key: str):
     with httpx.Client(timeout=15) as client:
         response = client.delete(_base() + _path(key), headers=_headers())
         response.raise_for_status()
+
+def download_private_image(key: str) -> bytes:
+    """Download an object over the authenticated server channel, never via a public URL."""
+    with httpx.Client(timeout=30) as client:
+        response = client.get(_base() + _path(key), headers=_headers())
+        response.raise_for_status()
+        if len(response.content) > 12_582_912:
+            raise ValueError("Downloaded photo exceeds limit")
+        return response.content
