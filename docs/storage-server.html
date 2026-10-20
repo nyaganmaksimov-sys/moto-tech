@@ -48,7 +48,7 @@ body:has(#mainSidebar:not(.hidden)) .server-dashboard{max-width:1450px;margin:0 
 #mainSidebar .side-link:focus-visible{outline:2px solid #f04b55;outline-offset:2px}
 #mainSidebar .side-link:disabled{opacity:.38;min-height:34px;padding:7px 12px}
 #mainSidebar .side-sep{margin-top:13px;border-top:1px solid #303847;padding:16px 12px 9px;text-transform:uppercase;letter-spacing:.08em}
-body:has(#mainSidebar:not(.hidden)) #inventoryScreen,body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:258px}
+body:has(#mainSidebar:not(.hidden)) #procurementScreen,body:has(#mainSidebar:not(.hidden)) #inventoryScreen,body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:258px}
 body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 #systemTabs #openSystem,#systemTabs #openRepairs,#systemTabs #openStorage,#systemTabs #openEmployees{display:none}
 @media(max-width:850px){
@@ -76,12 +76,14 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <button class="side-link" disabled title="Ожидает подключения к общей базе">≡ Прайс-лист</button>
 <button class="side-link" data-target="fleet">◇ Клиенты и техника</button>
 <button class="side-link" data-target="inventory">▣ Склад и запчасти</button>
-<button class="side-link" disabled title="Ожидает подключения к общей базе">▧ Заявки на запчасти</button>
-<button class="side-link" disabled title="Ожидает подключения к общей базе">▥ Поставщики</button>
+<button class="side-link" data-target="requests">▧ Заявки на запчасти</button>
+<button class="side-link" data-target="suppliers">▥ Поставщики</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">₽ Финансы</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">⚙ Настройки</button>
 </aside>
-<section id="inventoryScreen" class="hidden"><div class="server-dashboard"><h2>Склад и запчасти</h2><p class="muted">Остатки и операции хранятся в PostgreSQL</p>
+<section id="procurementScreen" class="hidden"><div class="server-dashboard"><h2 id="procurementTitle">Закупки</h2><div class="row dashboard-content">
+<div class="card"><h3>Поставщики</h3><div id="supplierItems"></div><form id="supplierCreate"><label>Название поставщика</label><input name="name" required><label>Контактное лицо</label><input name="contact_person"><label>Телефон</label><input name="phone"><label>Email</label><input name="email" type="email"><button class="primary">Добавить поставщика</button></form></div>
+<div class="card"><h3>Заявки на запчасти</h3><div id="requestItems"></div><form id="partsRequestCreate"><label>Наименование детали</label><input name="part_name" required><label>Артикул</label><input name="sku"><label>Количество</label><input name="quantity" type="number" min="0.001" step="0.001" required><label>Поставщик</label><select name="supplier_id" id="reqSupplier"></select><label>UUID заказ-наряда (необязательно)</label><input name="repair_id"><label>Примечание</label><textarea name="notes"></textarea><button class="primary">Создать заявку</button></form></div></div></div></section><section id="inventoryScreen" class="hidden"><div class="server-dashboard"><h2>Склад и запчасти</h2><p class="muted">Остатки и операции хранятся в PostgreSQL</p>
 <div class="row dashboard-content"><section class="card"><h3>Остатки</h3><div id="stockItems"></div><h3>Последние движения</h3><div id="stockMovements"></div></section>
 <section class="card"><h3>Новая запчасть</h3><form id="partCreate"><label>Артикул</label><input name="sku" required><label>Наименование</label><input name="name" required><label>Единица</label><input name="unit" value="шт" required><label>Закупочная цена ₽</label><input name="purchase_price" type="number" step="0.01" min="0" value="0"><label>Цена продажи ₽</label><input name="sale_price" type="number" step="0.01" min="0" value="0"><button class="primary">Добавить</button></form>
 <h3>Приход / расход</h3><form id="stockMove"><label>Запчасть</label><select name="part_id" id="stockPart" required></select><label>Количество (+ приход, − расход)</label><input name="delta" type="number" step="0.001" required><label>Причина</label><input name="reason" required><label>UUID заказ-наряда (только для списания, необязательно)</label><input name="repair_id" placeholder="UUID заказа"><button class="primary">Провести операцию</button></form></section></div></div></section><section id="fleetScreen" class="hidden"><div class="server-dashboard"><h2>Клиенты и техника</h2><div class="row dashboard-content">
@@ -173,10 +175,10 @@ function setSignedIn(on){
  if(on){$('pinLogin').classList.add('hidden');$('pinSetup').classList.add('hidden')}
  $('systemTabs').classList.toggle('hidden',!on);
  $('mainSidebar').classList.toggle('hidden',!on);
- if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen','fleetScreen','inventoryScreen'])$(id).classList.add('hidden');current=null}
+ if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen','fleetScreen','inventoryScreen','procurementScreen'])$(id).classList.add('hidden');current=null}
 }
 function switchSystem(view){
- const employees=view==='employees',storage=view==='storage',repairs=view==='repairs',home=view==='full',fleet=view==='fleet',inventory=view==='inventory';
+ const employees=view==='employees',storage=view==='storage',repairs=view==='repairs',home=view==='full',fleet=view==='fleet',inventory=view==='inventory',procurement=view==='requests'||view==='suppliers';
  $('fullSystem').classList.toggle('hidden',!(home||repairs));
  $('repairDashboardContent').classList.toggle('hidden',home);
  $('homeOrderCard').classList.toggle('hidden',!home);
@@ -185,13 +187,31 @@ function switchSystem(view){
  $('employeesScreen').classList.toggle('hidden',!employees);
  $('fleetScreen').classList.toggle('hidden',!fleet);
  $('inventoryScreen').classList.toggle('hidden',!inventory);
+ $('procurementScreen').classList.toggle('hidden',!procurement);
  for(const [id,active] of [['openSystem',home],['openRepairs',repairs],['openStorage',storage],['openEmployees',employees]])$(id).classList.toggle('active',active);
  document.querySelectorAll('#mainSidebar [data-target]').forEach(b=>b.classList.toggle('active',b.dataset.target===view));
  if(home||repairs)refreshRepairs().catch(e=>status(e.message));
  if(employees)refreshEmployees().catch(e=>status(e.message));
  if(fleet)refreshFleet().catch(e=>status(e.message));
  if(inventory)refreshInventory().catch(e=>status(e.message));
+ if(procurement){$('procurementTitle').textContent=view==='suppliers'?'Поставщики':'Заявки на запчасти';refreshProcurement().catch(e=>status(e.message))}
 }
+async function refreshProcurement(){
+ const [suppliers,requests]=await Promise.all([request('/suppliers'),request('/parts-requests')]);
+ const a=$('supplierItems'),b=$('requestItems'),select=$('reqSupplier');a.replaceChildren();b.replaceChildren();select.replaceChildren();
+ select.add(new Option('Не выбран',''));
+ for(const x of suppliers){const p=document.createElement('p');p.textContent=x.name+(x.phone?' · '+x.phone:'');a.append(p);select.add(new Option(x.name,x.id))}
+ for(const x of requests){
+  const line=document.createElement('div');line.style.cssText='padding:8px;border-bottom:1px solid #374153';
+  const heading=document.createElement('p');heading.textContent=x.part_name+' · '+x.quantity+' · '+({requested:'Заявлена',ordered:'Заказана',received:'Получена',cancelled:'Отменена'}[x.status]||x.status);line.append(heading);
+  const next={requested:['ordered','cancelled'],ordered:['received','cancelled']}[x.status]||[];
+  for(const value of next){const btn=document.createElement('button');btn.type='button';btn.textContent={ordered:'Заказать',received:'Отметить полученной',cancelled:'Отменить'}[value];btn.onclick=async()=>{try{await request('/parts-requests/'+x.id+'/status',{method:'PATCH',body:{status:value}});await refreshProcurement()}catch(e){status(e.message)}};line.append(btn)}
+  b.append(line)
+ }
+ if(!suppliers.length)a.textContent='Поставщиков пока нет';if(!requests.length)b.textContent='Заявок пока нет';
+}
+$('supplierCreate').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;try{await request('/suppliers',{method:'POST',body:Object.fromEntries(new FormData(form).entries())});form.reset();await refreshProcurement();status('Поставщик сохранён')}catch(err){status(err.message)}};
+$('partsRequestCreate').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;try{const data=Object.fromEntries(new FormData(form).entries());data.supplier_id=data.supplier_id||null;data.repair_id=data.repair_id||null;data.quantity=Number(data.quantity);await request('/parts-requests',{method:'POST',body:data});form.reset();await refreshProcurement();status('Заявка сохранена')}catch(err){status(err.message)}};
 async function refreshInventory(){
  const [parts,movements]=await Promise.all([request('/inventory'),request('/inventory/movements')]);
  const items=$('stockItems'),history=$('stockMovements'),select=$('stockPart');
