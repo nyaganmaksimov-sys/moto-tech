@@ -8,6 +8,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: mototech_test
+          POSTGRES_PASSWORD: test_only_password
+          POSTGRES_DB: mototech_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mototech_test -d mototech_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: test_only_password
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: mototech_test
+      PGDATABASE: mototech_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -18,3 +38,16 @@ jobs:
       - run: python -m pip install -r backend/requirements.txt httpx
       - run: python -m compileall -q backend
       - run: python -m unittest discover -s backend/tests -v
+      - name: Apply initial schema
+        run: |
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/001_storage_foundation.sql
+          psql -v ON_ERROR_STOP=1 -f backend/migrations/002_staff_auth.sql
+      - name: Validate schema constraints
+        run: |
+          psql -v ON_ERROR_STOP=1 -c "INSERT INTO storage_contracts(contract_number,owner_name,vin,brand_model) VALUES ('TEST-1','Demo','FRAME-001','Demo bike');"
+          if psql -v ON_ERROR_STOP=1 -c "INSERT INTO storage_contracts(contract_number,owner_name,vin,brand_model) VALUES ('TEST-2','Demo','frame 001','Demo bike');"; then
+            echo "Duplicate VIN was incorrectly accepted"
+            exit 1
+          fi
+          psql -v ON_ERROR_STOP=1 -c "UPDATE storage_contracts SET status='returned', returned_at=now() WHERE contract_number='TEST-1';"
+          psql -v ON_ERROR_STOP=1 -c "INSERT INTO storage_contracts(contract_number,owner_name,vin,brand_model) VALUES ('TEST-2','Demo','FRAME-001','Demo bike');"
