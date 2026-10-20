@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mototech
+      POSTGRES_USER: mototech
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mototech -d mototech"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://mototech:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/mototech
+      MOTOTECH_JWT_SECRET: ${MOTOTECH_JWT_SECRET:?Set MOTOTECH_JWT_SECRET}
+      MOTOTECH_ALLOWED_ORIGINS: ${MOTOTECH_ALLOWED_ORIGINS:-}
+      MOTOTECH_PRIVATE_PHOTO_ROOT: /private-photos
+    volumes:
+      - photo_data:/private-photos
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:10000:10000"
+    networks: [internal]
+volumes:
+  postgres_data:
+  photo_data:
+networks:
+  internal:
+    internal: false
