@@ -223,10 +223,9 @@ async def complete_storage_handover(
                 raise HTTPException(409, str(exc))
             updated = await c.fetchrow("""UPDATE storage_contracts
                 SET status='returned',returned_at=now(),updated_at=now(),
-                    updated_by=$2,version=version+1,
-                    other_condition=$3
+                    updated_by=$2,version=version+1
                 WHERE id=$1 RETURNING id,status,returned_at,version""",
-                contract_id, person["id"], payload.condition_at_return.strip())
+                contract_id, person["id"])
             await c.execute("""INSERT INTO storage_events(contract_id,event_type,actor_id,payload)
                 VALUES($1,'returned',$2,$3::jsonb)""",
                 contract_id, person["id"], json.dumps({
