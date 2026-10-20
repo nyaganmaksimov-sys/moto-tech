@@ -1,4 +1,5 @@
 BEGIN;
+CREATE SEQUENCE IF NOT EXISTS repair_order_number_seq START 1001;
 CREATE TABLE IF NOT EXISTS repair_orders (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  order_number text NOT NULL UNIQUE,
