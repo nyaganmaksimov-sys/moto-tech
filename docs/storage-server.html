@@ -3,7 +3,7 @@
 <title>MOTO TECH — серверное хранение (тест)</title>
 <style>
 :root{font:15px system-ui,Arial;background:#0e1117;color:#ebedf5}*{box-sizing:border-box}body{margin:0}header{padding:18px 24px;background:#171b23;border-bottom:1px solid #343a46;display:flex;justify-content:space-between;align-items:center}h1{font-size:22px;margin:0}.brand{color:#f04b50}main{max-width:1100px;margin:auto;padding:20px}.card{border:1px solid #333c49;background:#1b2029;padding:20px;border-radius:12px;margin-bottom:18px}label{display:block;color:#aab5c4;margin:10px 0 5px;font-size:13px}input,textarea,select{width:100%;padding:11px;background:#10141b;color:#fff;border:1px solid #404a58;border-radius:8px;font:inherit}textarea{min-height:80px}button{background:#313946;color:#fff;border:1px solid #475160;padding:10px 14px;border-radius:8px;cursor:pointer}button.primary{background:#d53e46;border-color:#d53e46}.row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.row>*{flex:1;min-width:180px}.muted{color:#a5afbd}.notice{color:#f3c978}.hidden{display:none}.items button{width:100%;text-align:left;margin:5px 0}#status{white-space:pre-wrap;padding:12px 0}.gallery{display:flex;flex-wrap:wrap;gap:8px}.gallery figure{margin:0;width:155px;border:1px solid #465264;border-radius:8px;overflow:hidden;background:#121720}.gallery img{width:100%;height:120px;object-fit:cover;display:block;cursor:zoom-in}.gallery figcaption{padding:6px;font-size:12px;overflow-wrap:anywhere}small{color:#a6b1c0}a{color:#f6a2a5}
-</style></head><body>
+ .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}.info-grid div{border:1px solid #374251;border-radius:9px;padding:11px;overflow-wrap:anywhere}.info-grid small{display:block;margin-bottom:5px}.doc-actions{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0} .doc-actions button{flex:0 1 auto}</style></head><body>
 <header><h1><span class="brand">MOTO TECH</span> / Серверное хранение</h1><a href="./index.html">← Основная система</a></header>
 <main>
 <p class="notice">Тестовый интерфейс. Используйте только защищённый HTTPS-сервер MOTO TECH. Сведения о клиентах не вводите до проверки развёртывания и защиты данных. Демо из основной системы сюда автоматически не переносится.</p>
@@ -27,7 +27,7 @@
 <p><button class="primary" type="submit">Сохранить черновик</button></p></form></div></div>
 </section>
 <section class="card hidden" id="detail">
-<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p>
+<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p><div id="detailsGrid" class="info-grid"></div><div class="doc-actions"><button type="button" onclick="printStoragePaper('intake')">Печать акта приёмки</button><button type="button" onclick="printStoragePaper('agreement')">Договор хранения (проект)</button><button type="button" onclick="printStoragePaper('return')">Акт выдачи</button></div>
 <p>Для приёмки нужны фото: спереди, сзади, слева, справа и VIN. Повреждения снимайте отдельно.</p>
 <form id="upload"><div class="row"><div><label>Тип фотографии</label><select name="kind"><option value="front">Спереди</option><option value="rear">Сзади</option><option value="left">Слева</option><option value="right">Справа</option><option value="vin">VIN</option><option value="dashboard">Приборная панель</option><option value="damage">Повреждение</option><option value="pts">ПТС</option><option value="other">Другое</option></select></div>
 <div><label>Описание / место повреждения</label><input name="note" maxlength="2000"></div><div><label>Фото</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></div></div>
@@ -41,6 +41,8 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let base='',token='',current=null;
+const statusRu={draft:'Черновик',stored:'На хранении',return_requested:'Запрошена выдача',returned:'Выдан',cancelled:'Отменён'};
+const kindRu={front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',vin:'VIN',dashboard:'Приборная панель',damage:'Повреждение',pts:'ПТС',other:'Другое'};
 function status(message){$('status').textContent=message}
 function setSignedIn(on){$('signIn').classList.toggle('hidden',on);$('workspace').classList.toggle('hidden',!on);if(!on){$('detail').classList.add('hidden');current=null}}
 async function request(path,{method='GET',body,form}={}){
@@ -67,7 +69,7 @@ $('logout').onclick=()=>{token='';setSignedIn(false);status('Сеанс заве
 async function refresh(){
  const rows=await request('/storage');$('records').replaceChildren();
  if(!rows.length)$('records').textContent='Карточек пока нет';
- rows.forEach(item=>{let b=document.createElement('button');b.textContent=item.contract_number+' · '+item.brand_model+' · '+item.status;b.onclick=()=>openRecord(item.id);$('records').append(b)});
+ rows.forEach(item=>{let b=document.createElement('button');b.textContent=item.contract_number+' · '+item.brand_model+' · '+(statusRu[item.status]||item.status);b.onclick=()=>openRecord(item.id);$('records').append(b)});
 }
 $('refresh').onclick=()=>refresh().catch(e=>status(e.message));
 $('create').onsubmit=async e=>{
@@ -77,6 +79,22 @@ $('create').onsubmit=async e=>{
  }catch(err){status(err.message)}
 };
 const required=['front','rear','left','right','vin'];
+function renderDetailGrid(){
+ const fields=[['Номер договора',current.contract_number],['Владелец',current.owner_name],['Телефон',current.owner_phone],['Мотоцикл',current.brand_model],['VIN / номер рамы',current.vin],['Госномер',current.plate],['Место хранения',current.location_label],['Тариф в месяц',current.monthly_rate_rub == null?'':current.monthly_rate_rub+' ₽'],['Состояние при приёмке',current.body_condition],['Повреждения',current.damage_description],['Дата приёмки',current.received_at?new Date(current.received_at).toLocaleString('ru-RU'):'Не завершена'],['Дата выдачи',current.returned_at?new Date(current.returned_at).toLocaleString('ru-RU'):'Не выдан']];
+ const grid=$('detailsGrid');grid.replaceChildren();
+ for(const [label,value] of fields){const item=document.createElement('div'),small=document.createElement('small'),content=document.createElement('span');small.textContent=label;content.textContent=String(value||'—');item.append(small,content);grid.append(item)}
+}
+function printStoragePaper(kind){
+ if(!current)return;
+ if(kind==='return'&&current.status!=='returned'){status('Акт выдачи доступен только после оформления возврата.');return;}
+ const labels={intake:'АКТ ПРИЁМА-ПЕРЕДАЧИ МОТОЦИКЛА НА ХРАНЕНИЕ',agreement:'ДОГОВОР ХРАНЕНИЯ МОТОЦИКЛА — ПРОЕКТ',return:'АКТ ВОЗВРАТА МОТОЦИКЛА'};
+ const encode=t=>String(t??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const line=(key,v)=>'<tr><th>'+encode(key)+'</th><td>'+encode(v||'—')+'</td></tr>';
+ const rows=[['Договор №',current.contract_number],['Владелец',current.owner_name],['Телефон',current.owner_phone],['Мотоцикл',current.brand_model],['VIN',current.vin],['Госномер',current.plate],['Место хранения',current.location_label],['Тариф, ₽/месяц',current.monthly_rate_rub],['Состояние при приёмке',current.body_condition],['Повреждения',current.damage_description],['Принят',current.received_at?new Date(current.received_at).toLocaleString('ru-RU'):'Не принят'],['Возвращён',current.returned_at?new Date(current.returned_at).toLocaleString('ru-RU'):'Не возвращён']];
+ const subtitle=kind==='agreement'?'Это проект документа. Реквизиты сторон, порядок оплаты, срок, ответственность и условия досрочного возврата необходимо согласовать до подписания.':kind==='return'?'Стороны подтверждают фактическую выдачу техники; состояние при возврате и комплектность нужно зафиксировать отдельно.':'Осмотр, комплектность, ключи и обнаруженные повреждения оформляются сторонами при фактической приёмке.';
+ const doc='<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>'+encode(labels[kind])+'</title><style>body{font:13px Arial,sans-serif;color:#111;margin:20mm}h1{font-size:17px;text-align:center;margin:0 0 25px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #555;padding:8px;text-align:left;vertical-align:top}th{width:35%}.note{margin:20px 0;line-height:1.5}.sign{display:flex;justify-content:space-between;margin-top:55px;gap:35px}.sign div{width:48%;border-top:1px solid #555;padding-top:8px}@page{size:A4;margin:15mm}</style></head><body><h1>'+encode(labels[kind])+'</h1><table>'+rows.map(v=>line(...v)).join('')+'</table><p class="note">'+encode(subtitle)+'</p><div class="sign"><div>Передающая сторона: _______________________</div><div>Принимающая сторона: _______________________</div></div></body></html>';
+ const win=window.open('','_blank');if(!win){status('Разрешите всплывающие окна для печати.');return;}win.document.open();win.document.write(doc);win.document.close();win.focus();win.print();
+}
 const photoBlobUrls=new Set();
 let photoGalleryGeneration=0;
 async function requestPhoto(contractId,photoId,img,generation){
@@ -96,18 +114,19 @@ async function openRecord(id){
  try{
   current=await request('/storage/'+encodeURIComponent(id));$('detail').classList.remove('hidden');
   $('detailName').textContent='Договор '+current.contract_number+' · '+current.brand_model;
-  $('detailMeta').textContent=current.status+' · VIN '+current.vin+' · версия '+current.version;
+  $('detailMeta').textContent=(statusRu[current.status]||current.status)+' · VIN '+current.vin+' · версия '+current.version;
+  renderDetailGrid();
   clearPhotoUrls();$('photos').replaceChildren();
   const detailId=current.id;
   for(const photo of current.photos){
     const figure=document.createElement('figure'),img=document.createElement('img'),caption=document.createElement('figcaption');
-    img.alt='Фото '+photo.kind;
-    caption.textContent=photo.kind+(photo.note?' · '+photo.note:'');
+    img.alt='Фото '+(kindRu[photo.kind]||photo.kind);
+    caption.textContent=(kindRu[photo.kind]||photo.kind)+(photo.note?' · '+photo.note:'');
     figure.append(img,caption);$('photos').append(figure);
     requestPhoto(detailId,photo.id,img,photoGalleryGeneration).catch(()=>{if(img.isConnected)caption.textContent+=' · не удалось получить фото'});
   }
   const kinds=new Set(current.photos.map(p=>p.kind));
-  $('missing').textContent=required.filter(k=>!kinds.has(k)).length?'Не хватает фото: '+required.filter(k=>!kinds.has(k)).join(', '):'Обязательные фото загружены.';
+  $('missing').textContent=required.filter(k=>!kinds.has(k)).length?'Не хватает фото: '+required.filter(k=>!kinds.has(k)).map(k=>kindRu[k]).join(', '):'Обязательные фото загружены.';
   $('upload').classList.toggle('hidden',!['draft','stored','return_requested'].includes(current.status));
   $('acceptBlock').classList.toggle('hidden',current.status!=='draft');
   $('returnBlock').classList.toggle('hidden',current.status!=='stored');
