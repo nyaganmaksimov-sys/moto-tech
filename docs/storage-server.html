@@ -53,14 +53,17 @@ body:has(#mainSidebar:not(.hidden)) .server-dashboard{max-width:1450px;margin:0 
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▦ Запись и посты</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▥ Доска заказов</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">≡ Прайс-лист</button>
-<button class="side-link" disabled title="Ожидает подключения к общей базе">◇ Клиенты и техника</button>
+<button class="side-link" data-target="fleet">◇ Клиенты и техника</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▣ Склад и запчасти</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▧ Заявки на запчасти</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">▥ Поставщики</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">₽ Финансы</button>
 <button class="side-link" disabled title="Ожидает подключения к общей базе">⚙ Настройки</button>
 </aside>
-<section id="employeesScreen" class="hidden"><div class="server-dashboard"><h2>Сотрудники MOTO TECH</h2><p class="muted">Учётные записи сотрудников из PostgreSQL</p><div class="row dashboard-content"><div class="card"><h3>Список сотрудников</h3><div id="employeeList"></div></div>
+<section id="fleetScreen" class="hidden"><div class="server-dashboard"><h2>Клиенты и техника</h2><div class="row dashboard-content">
+<div class="card"><h3>Клиенты</h3><input id="clientSearch" placeholder="Поиск клиента" aria-label="Поиск клиента"><div id="clientsList"></div><h3>Новый клиент</h3><form id="clientCreate"><label>ФИО</label><input name="full_name" required minlength="2"><label>Телефон</label><input name="phone"><label>Email</label><input name="email" type="email"><label>Примечание</label><textarea name="notes"></textarea><button class="primary">Добавить клиента</button></form></div>
+<div class="card"><h3>Техника</h3><div id="vehiclesList"></div><h3>Добавить технику</h3><form id="vehicleCreate"><label>Владелец</label><select name="client_id" id="vehicleClient" required></select><label>Марка</label><input name="brand" required><label>Модель</label><input name="model" required><label>Год выпуска</label><input name="year" type="number" min="1900" max="2200"><label>VIN / номер рамы</label><input name="vin"><label>Госномер</label><input name="plate"><button class="primary">Сохранить технику</button></form></div>
+</div></div></section><section id="employeesScreen" class="hidden"><div class="server-dashboard"><h2>Сотрудники MOTO TECH</h2><p class="muted">Учётные записи сотрудников из PostgreSQL</p><div class="row dashboard-content"><div class="card"><h3>Список сотрудников</h3><div id="employeeList"></div></div>
 <div id="newEmployeePanel" class="card hidden"><h3>Добавить сотрудника</h3><form id="employeeCreate">
 <label>ФИО</label><input name="full_name" required minlength="3" maxlength="250" autocomplete="off">
 <label>Должность</label><input name="position" required minlength="2" maxlength="150" placeholder="Например, старший механик">
@@ -141,21 +144,34 @@ function setSignedIn(on){
  $('signIn').classList.toggle('hidden',on);
  $('systemTabs').classList.toggle('hidden',!on);
  $('mainSidebar').classList.toggle('hidden',!on);
- if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen'])$(id).classList.add('hidden');current=null}
+ if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen','fleetScreen'])$(id).classList.add('hidden');current=null}
 }
 function switchSystem(view){
- const employees=view==='employees',storage=view==='storage',repairs=view==='repairs',home=view==='full';
+ const employees=view==='employees',storage=view==='storage',repairs=view==='repairs',home=view==='full',fleet=view==='fleet';
  $('fullSystem').classList.toggle('hidden',!(home||repairs));
  $('repairDashboardContent').classList.toggle('hidden',home);
  $('homeOrderCard').classList.toggle('hidden',!home);
  $('workspace').classList.toggle('hidden',!storage);
  $('detail').classList.toggle('hidden',!storage||!current);
  $('employeesScreen').classList.toggle('hidden',!employees);
+ $('fleetScreen').classList.toggle('hidden',!fleet);
  for(const [id,active] of [['openSystem',home],['openRepairs',repairs],['openStorage',storage],['openEmployees',employees]])$(id).classList.toggle('active',active);
  document.querySelectorAll('#mainSidebar [data-target]').forEach(b=>b.classList.toggle('active',b.dataset.target===view));
  if(home||repairs)refreshRepairs().catch(e=>status(e.message));
  if(employees)refreshEmployees().catch(e=>status(e.message));
+ if(fleet)refreshFleet().catch(e=>status(e.message));
 }
+let clientsCache=[];
+async function refreshFleet(){
+ const [clients,vehicles]=await Promise.all([request('/clients'),request('/vehicles')]);
+ clientsCache=clients;const list=$('clientsList'),cars=$('vehiclesList'),choice=$('vehicleClient');list.replaceChildren();cars.replaceChildren();choice.replaceChildren();
+ for(const c of clients){const item=document.createElement('p');item.textContent=c.full_name+' · '+(c.phone||'без телефона');item.dataset.query=(c.full_name+' '+(c.phone||'')).toLowerCase();list.append(item);const opt=document.createElement('option');opt.value=c.id;opt.textContent=c.full_name;choice.append(opt)}
+ for(const v of vehicles){const item=document.createElement('p');item.textContent=v.owner_name+' — '+v.brand+' '+v.model+(v.vin?' · '+v.vin:'');cars.append(item)}
+ if(!clients.length)list.textContent='Клиентов пока нет';if(!vehicles.length)cars.textContent='Техника пока не добавлена';
+}
+$('clientSearch').oninput=()=>{const q=$('clientSearch').value.toLowerCase();$('clientsList').querySelectorAll('p').forEach(el=>el.classList.toggle('hidden',!el.dataset.query.includes(q)))};
+$('clientCreate').onsubmit=async e=>{e.preventDefault();const b=e.currentTarget.querySelector('button');b.disabled=true;try{await request('/clients',{method:'POST',body:Object.fromEntries(new FormData(e.currentTarget).entries())});e.currentTarget.reset();await refreshFleet();status('Клиент сохранён')}catch(err){status(err.message)}finally{b.disabled=false}};
+$('vehicleCreate').onsubmit=async e=>{e.preventDefault();const b=e.currentTarget.querySelector('button');b.disabled=true;try{const data=Object.fromEntries(new FormData(e.currentTarget).entries());data.year=data.year?Number(data.year):null;await request('/vehicles',{method:'POST',body:data});e.currentTarget.reset();await refreshFleet();status('Техника сохранена')}catch(err){status(err.message)}finally{b.disabled=false}};
 async function refreshEmployees(){
  $('newEmployeePanel').classList.toggle('hidden',!['owner_manager','administrator'].includes(staffRole));
  const ownerOption=$('newEmployeeRole').querySelector('option[value="owner_manager"]');if(ownerOption)ownerOption.remove();
