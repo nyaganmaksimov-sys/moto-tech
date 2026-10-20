@@ -90,6 +90,13 @@ async def run():
                 if not await connection.fetchval("SELECT to_regclass($1)", "public."+table):
                     raise RuntimeError("Missing inventory table: "+table)
             print("Inventory schema checks passed")
+            if not await connection.fetchval("SELECT to_regclass('public.inventory_suppliers')"):
+                await connection.execute((base / "008_suppliers_requests.sql").read_text(encoding="utf-8"))
+                print("Applied: 008_suppliers_requests.sql")
+            for table in ("inventory_suppliers","inventory_requests"):
+                if not await connection.fetchval("SELECT to_regclass($1)","public."+table):
+                    raise RuntimeError("Missing procurement table: "+table)
+            print("Procurement schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
