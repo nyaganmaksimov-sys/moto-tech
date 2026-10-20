@@ -47,7 +47,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.getenv("MOTOTECH_ALLOWED_ORIGINS", "").split(",") if o.strip()],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -202,6 +202,69 @@ async def view_storage_photo(
         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
     )
 
+
+
+class StorageEdit(BaseModel):
+    version: int = Field(ge=1)
+    owner_name: str = Field(min_length=1,max_length=250)
+    owner_phone: str | None = Field(default=None,max_length=80)
+    brand_model: str = Field(min_length=1,max_length=200)
+    plate: str | None = Field(default=None,max_length=30)
+    location_label: str | None = Field(default=None,max_length=100)
+    monthly_rate_rub: Decimal = Field(ge=0,le=100000000)
+    body_condition: str = Field(min_length=1,max_length=10000)
+    damage_description: str | None = Field(default=None,max_length=10000)
+
+@app.patch("/storage/{contract_id}")
+async def edit_storage(
+    contract_id: uuid.UUID, payload: StorageEdit,
+    person=Depends(require_roles("owner_manager","manager","administrator")),
+    db=Depends(database)
+):
+    async with db.acquire() as c:
+        async with c.transaction():
+            existing = await c.fetchrow("SELECT status,version FROM storage_contracts WHERE id=$1 FOR UPDATE",contract_id)
+            if not existing:
+                raise HTTPException(404,"Contract not found")
+            if existing["status"] == "returned":
+                raise HTTPException(409,"Returned contracts are read-only")
+            if existing["version"] != payload.version:
+                raise HTTPException(409,"Card changed: reload before editing")
+            updated = await c.fetchrow("""UPDATE storage_contracts SET
+              owner_name=$2,owner_phone=$3,brand_model=$4,plate=$5,location_label=$6,
+              monthly_rate_rub=$7,body_condition=$8,damage_description=$9,
+              updated_by=$10,updated_at=now(),version=version+1 WHERE id=$1
+              RETURNING id,version,status""",contract_id,payload.owner_name.strip(),
+              payload.owner_phone,payload.brand_model.strip(),payload.plate,
+              payload.location_label,payload.monthly_rate_rub,payload.body_condition.strip(),
+              payload.damage_description,person["id"])
+            await c.execute("""INSERT INTO storage_events(contract_id,event_type,actor_id)
+                               VALUES($1,'updated',$2)""",contract_id,person["id"])
+    return dict(updated)
+
+@app.delete("/storage/{contract_id}/photos/{photo_id}")
+async def remove_storage_photo(
+    contract_id: uuid.UUID, photo_id: uuid.UUID,
+    person=Depends(require_roles("owner_manager","manager","administrator")),
+    db=Depends(database)
+):
+    async with db.acquire() as c:
+        async with c.transaction():
+            record = await c.fetchrow("SELECT status FROM storage_contracts WHERE id=$1 FOR UPDATE",contract_id)
+            if not record:
+                raise HTTPException(404,"Contract not found")
+            if record["status"] != "draft":
+                raise HTTPException(409,"Photos from accepted storage cannot be removed; retain audit evidence")
+            photo = await c.fetchrow("""SELECT id FROM storage_photos
+                          WHERE id=$1 AND contract_id=$2 AND deleted_at IS NULL
+                          FOR UPDATE""",photo_id,contract_id)
+            if not photo:
+                raise HTTPException(404,"Photo not found")
+            await c.execute("UPDATE storage_photos SET deleted_at=now(),deleted_by=$2 WHERE id=$1",photo_id,person["id"])
+            await c.execute("""INSERT INTO storage_events(contract_id,event_type,actor_id,payload)
+                 VALUES($1,'photo_removed',$2,$3::jsonb)""",contract_id,person["id"],
+                 json.dumps({"photo_id":str(photo_id)}))
+    return {"removed":True,"photo_id":photo_id,"message":"Photo hidden from draft, audit retained"}
 
 
 class ReturnRequest(BaseModel):
