@@ -1,5 +1,10 @@
 import os
 import json
+import hashlib
+import io
+import secrets
+from pathlib import Path
+from PIL import Image, UnidentifiedImageError
 import uuid
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
@@ -9,7 +14,7 @@ import asyncpg
 import jwt
 from jwt import InvalidTokenError
 from pwdlib import PasswordHash
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -235,5 +240,124 @@ async def complete_storage_handover(
                 }))
     return dict(updated)
 
-# Acceptance and photo uploads remain disabled until private object storage is operational.
+
+MAX_IMAGE_BYTES = 12 * 1024 * 1024
+PHOTO_TYPES = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+STORAGE_PHOTO_KINDS = {"front", "rear", "left", "right", "vin", "dashboard", "damage", "other", "pts"}
+
+def private_photo_root():
+    raw = os.getenv("MOTOTECH_PRIVATE_PHOTO_ROOT", "").strip()
+    if not raw:
+        raise HTTPException(503, "Private photo storage not configured")
+    root = Path(raw).expanduser().resolve()
+    if not root.is_dir() or root.is_symlink():
+        raise HTTPException(503, "Private photo directory unavailable")
+    return root
+
+@app.post("/storage/{contract_id}/photos", status_code=201)
+async def upload_storage_photo(
+    contract_id: uuid.UUID,
+    kind: str = Form(...),
+    note: str = Form(""),
+    photo: UploadFile = File(...),
+    person=Depends(require_roles(*ROLES)),
+    db=Depends(database),
+):
+    if kind not in STORAGE_PHOTO_KINDS:
+        raise HTTPException(422, "Unknown photo category")
+    if kind == "damage" and not note.strip():
+        raise HTTPException(422, "Damage description is required")
+    if len(note) > 2000:
+        raise HTTPException(422, "Photo note is too long")
+    root = private_photo_root()
+    raw = await photo.read(MAX_IMAGE_BYTES + 1)
+    await photo.close()
+    if not raw or len(raw) > MAX_IMAGE_BYTES:
+        raise HTTPException(413, "Image exceeds 12 MB limit")
+    try:
+        with Image.open(io.BytesIO(raw)) as source:
+            if source.format not in PHOTO_TYPES:
+                raise HTTPException(415, "Unsupported image format")
+            source.verify()
+        with Image.open(io.BytesIO(raw)) as source:
+            source.load()
+            if source.width * source.height > 35_000_000:
+                raise HTTPException(413, "Image dimensions too large")
+            clean_image = source.convert("RGB")
+            encoded = io.BytesIO()
+            clean_image.save(encoded, format="JPEG", quality=88, optimize=True)
+            data = encoded.getvalue()
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+        raise HTTPException(415, "Invalid image")
+    photo_id = uuid.uuid4()
+    relative = f"{contract_id}/{photo_id}.jpg"
+    directory = root / str(contract_id)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = directory / f"{photo_id}.jpg"
+    temp = directory / f".{photo_id}.{secrets.token_hex(8)}.tmp"
+    try:
+        with temp.open("xb") as output:
+            output.write(data)
+        os.chmod(temp, 0o600)
+        os.replace(temp, target)
+        async with db.acquire() as c:
+            async with c.transaction():
+                contract = await c.fetchrow("SELECT id,status FROM storage_contracts WHERE id=$1 FOR UPDATE", contract_id)
+                if not contract:
+                    raise HTTPException(404, "Contract not found")
+                if contract["status"] not in ("draft", "stored", "return_requested"):
+                    raise HTTPException(409, "Cannot add photos to a closed contract")
+                await c.execute("""INSERT INTO storage_photos
+                     (id,contract_id,kind,object_key,sha256,mime_type,size_bytes,note,uploaded_by)
+                     VALUES($1,$2,$3,$4,$5,'image/jpeg',$6,$7,$8)""",
+                     photo_id, contract_id, kind, relative,
+                     hashlib.sha256(data).hexdigest(), len(data), note.strip(), person["id"])
+                await c.execute("""INSERT INTO storage_events(contract_id,event_type,actor_id,payload)
+                    VALUES($1,'photo_added',$2,$3::jsonb)""",contract_id,person["id"],
+                    json.dumps({"photo_id":str(photo_id),"kind":kind}))
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    finally:
+        temp.unlink(missing_ok=True)
+    return {"id":photo_id,"kind":kind,"note":note.strip()}
+
+class IntakeConfirmation(BaseModel):
+    version: int = Field(ge=1)
+    condition_confirmed: bool
+
+@app.post("/storage/{contract_id}/accept")
+async def accept_storage(
+    contract_id: uuid.UUID, payload: IntakeConfirmation,
+    person=Depends(require_roles(*ROLES)), db=Depends(database)
+):
+    if not payload.condition_confirmed:
+        raise HTTPException(422, "Confirm completed motorcycle condition inspection")
+    async with db.acquire() as c:
+        async with c.transaction():
+            contract = await c.fetchrow("""SELECT status,version,body_condition,damage_description
+                                          FROM storage_contracts WHERE id=$1 FOR UPDATE""", contract_id)
+            if not contract:
+                raise HTTPException(404, "Contract not found")
+            if contract["version"] != payload.version:
+                raise HTTPException(409, "Contract changed; refresh before acceptance")
+            if not (contract["body_condition"] or "").strip():
+                raise HTTPException(422, "Document the motorcycle body condition")
+            photos = await c.fetch("""SELECT kind,note,object_key FROM storage_photos
+                WHERE contract_id=$1 AND deleted_at IS NULL""", contract_id)
+            root = private_photo_root()
+            if not all((root / row["object_key"]).is_file() for row in photos):
+                raise HTTPException(409, "One or more uploaded photos are missing")
+            try:
+                validate_transition(contract["status"], "stored", [dict(row) for row in photos])
+            except ValueError as exc:
+                raise HTTPException(409, str(exc))
+            updated = await c.fetchrow("""UPDATE storage_contracts
+                SET status='stored',received_at=now(),updated_at=now(),
+                    updated_by=$2,version=version+1 WHERE id=$1
+                RETURNING id,status,version,received_at""", contract_id, person["id"])
+            await c.execute("""INSERT INTO storage_events(contract_id,event_type,actor_id)
+                               VALUES($1,'accepted',$2)""", contract_id, person["id"])
+    return dict(updated)
+
 # Employee provisioning remains an administrator-only offline operation.
