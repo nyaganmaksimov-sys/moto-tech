@@ -37,6 +37,27 @@ body:has(#signIn:not(.hidden)) #status{max-width:450px;margin:12px auto;color:#f
 body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) main{margin-left:248px}
 body:has(#mainSidebar:not(.hidden)) .server-dashboard{max-width:1450px;margin:0 auto}
 @media(max-width:850px){#mainSidebar{position:relative;top:auto;bottom:auto;width:auto;max-height:215px;display:flex;gap:6px;flex-wrap:wrap;padding:8px}.sidebar-brand,.side-sep{display:none}.side-link{width:auto;font-size:11px;padding:8px}.side-link:disabled{display:none}body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) main{margin-left:0}}
+
+/* Unified navigation layout */
+#mainSidebar{top:116px;width:258px;padding:14px 12px 24px;background:#151a23;box-shadow:8px 0 26px #0002;scrollbar-width:thin;scrollbar-color:#424c5e transparent}
+#mainSidebar .sidebar-brand{padding:8px 10px 20px;margin-bottom:9px;border-bottom:1px solid #303847}
+#mainSidebar .sidebar-logo{width:84px;height:84px;margin:0 auto 12px}
+#mainSidebar .side-link{display:flex;align-items:center;min-height:39px;padding:10px 12px;margin:2px 0;line-height:1.35;color:#dfe5ef;border:1px solid transparent;border-left:3px solid transparent;transition:background .12s,border-color .12s}
+#mainSidebar .side-link:hover:not(:disabled){background:#272e3a;color:#fff}
+#mainSidebar .side-link.active{background:#38242d;color:white;border-left-color:#ec4755;font-weight:600}
+#mainSidebar .side-link:focus-visible{outline:2px solid #f04b55;outline-offset:2px}
+#mainSidebar .side-link:disabled{opacity:.38;min-height:34px;padding:7px 12px}
+#mainSidebar .side-sep{margin-top:13px;border-top:1px solid #303847;padding:16px 12px 9px;text-transform:uppercase;letter-spacing:.08em}
+body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:258px}
+body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
+#systemTabs #openSystem,#systemTabs #openRepairs,#systemTabs #openStorage,#systemTabs #openEmployees{display:none}
+@media(max-width:850px){
+ #mainSidebar{position:relative;top:auto;bottom:auto;width:auto;max-height:none;display:flex;overflow:auto;flex-wrap:nowrap;gap:5px;padding:8px 12px;box-shadow:none}
+ #mainSidebar .side-link{width:auto;flex:none;white-space:nowrap;margin:0;min-height:38px}
+ #mainSidebar .side-link:disabled,#mainSidebar .sidebar-brand,#mainSidebar .side-sep{display:none}
+ body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:0}
+ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:12px}
+}
 </style></head><body>
 <header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1></header>
 <nav id="systemTabs" class="system-tabs hidden"><button id="openSystem" type="button" class="active">Главная</button><button id="openRepairs" type="button">Заказ-наряды и ремонт</button><button id="openStorage" type="button">Хранение мотоциклов</button><button id="openEmployees" type="button">Сотрудники</button><span id="staffMini" class="profile-mini"></span><button id="navLogout" type="button">Выйти</button></nav>
