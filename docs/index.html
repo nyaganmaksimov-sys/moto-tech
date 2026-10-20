@@ -676,7 +676,21 @@ function storagePersist(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(st
 function storageDraft(){const obj={};for(const [key] of STORAGE_FIELDS){const el=$('sf_'+key);if(el)obj[key]=el.value.trim()}obj.status=storageRecords.find(x=>x.id===storageEditingId)?.status||'На хранении';return obj}
 function storageEsc(s){return clean(String(s??''))}
 function newStorageRecord(){storageEditingId=null;showStorageEditor({date:localISODate(),startDate:localISODate(),keeperLegal:management.settings.legal||'MOTO TECH',keeperRepresentative:'Левандовский Александр Викторович',rate:'3000',keys:'1',conditionBody:'Без видимых повреждений'})}
-function showStorageEditor(record){$('storageEditor').style.display='block';$('storageEditorTitle').textContent=record.id?'Хранение № '+record.contractNumber:'Новый приём на хранение';$('storageFields').innerHTML='<div class="grid">'+STORAGE_FIELDS.map(([key,title,type,required])=>'<div><label>'+storageEsc(title)+(required?' *':'')+'</label>'+(type==='textarea'?'<textarea id="sf_'+key+'">'+storageEsc(record[key]||'')+'</textarea>':'<input id="sf_'+key+'" type="'+type+'" value="'+storageEsc(record[key]||'')+'">')+'</div>').join('')+'</div><div><label>Фото при приёме</label><input id="storagePhotoUpload" type="file" accept="image/*" onchange="addStoragePhoto(this)"><div id="storagePhotoCount" class="muted">'+(record.photos?.length||0)+' фото (вложения сохраняются в этом браузере)</div></div>';window.storageDraftPhotos=[...(record.photos||[])];$('storageEditor').scrollIntoView({behavior:'smooth'})}
+function showStorageEditor(record){
+ $('storageEditor').style.display='block';
+ $('storageEditorTitle').textContent=record.id?'Хранение № '+record.contractNumber:'Быстрая приёмка на хранение';
+ const primary=['contractNumber','date','startDate','ownerName','ownerPhone','brandModel','vin','plate','location','rate'];
+ const categories=[
+  {title:'Дополнительно о мотоцикле',keys:['year','color','mileage','engine','registration','conditionBody','conditionWheels','conditionOther','fuel','keys','extraKeys','accessories','documents']},
+  {title:'Данные владельца и документы',keys:['ownerEmail','ownerAddress','ownerDoc','ownerDocIssued']},
+  {title:'Условия хранения и возврат',keys:['endDate','paymentTerms','specialTerms','returnDate','returnCondition']},
+  {title:'Реквизиты хранителя',keys:['keeperLegal','keeperRepresentative','keeperBasis','keeperInn','keeperAddress','keeperPhone','keeperEmail']}
+ ];
+ const field=key=>{const entry=STORAGE_FIELDS.find(x=>x[0]===key);if(!entry)return '';const [id,title,type,required]=entry;return '<div><label>'+storageEsc(title)+(required?' *':'')+'</label>'+(type==='textarea'?'<textarea id="sf_'+id+'">'+storageEsc(record[id]||'')+'</textarea>':'<input id="sf_'+id+'" type="'+type+'" value="'+storageEsc(record[id]||'')+'">')+'</div>'};
+ $('storageFields').innerHTML='<p class="hint">Заполните основные поля. Остальные сведения можно добавить при необходимости перед печатью.</p><div class="grid">'+primary.map(field).join('')+'</div>'+categories.map(g=>'<details style="margin:12px 0;padding:12px;border:1px solid var(--border,#ddd);border-radius:10px"><summary style="cursor:pointer;font-weight:600">'+g.title+'</summary><div class="grid" style="margin-top:12px">'+g.keys.map(field).join('')+'</div></details>').join('')+'<div><label>Фото при приёме</label><input id="storagePhotoUpload" type="file" accept="image/*" onchange="addStoragePhoto(this)"><div id="storagePhotoCount" class="muted">'+(record.photos?.length||0)+' фото (сохраняются в этом браузере)</div></div>';
+ window.storageDraftPhotos=[...(record.photos||[])];
+ $('storageEditor').scrollIntoView({behavior:'smooth'})
+}
 function closeStorageEditor(){$('storageEditor').style.display='none';storageEditingId=null}
 function editStorageRecord(id){const o=storageRecords.find(x=>x.id===id);if(!o)return;storageEditingId=id;showStorageEditor(o)}
 function addStoragePhoto(input){const file=input.files?.[0];if(!file)return;resizePhoto(file).then(src=>{window.storageDraftPhotos=window.storageDraftPhotos||[];window.storageDraftPhotos.push({src,date:new Date().toISOString()});$('storagePhotoCount').textContent=window.storageDraftPhotos.length+' фото';}).catch(()=>alert('Не удалось обработать фото'))}
