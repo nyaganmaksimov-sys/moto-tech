@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>MOTO TECH — серверное хранение (тест)</title>
+<title>MOTO TECH — система управления мотосервисом</title>
 <style>
 :root{font:15px system-ui,Arial;background:#0e1117;color:#ebedf5}*{box-sizing:border-box}body{margin:0}header{padding:18px 24px;background:#171b23;border-bottom:1px solid #343a46;display:flex;justify-content:space-between;align-items:center}h1{font-size:22px;margin:0}.brand{color:#f04b50}main{max-width:1100px;margin:auto;padding:20px}.card{border:1px solid #333c49;background:#1b2029;padding:20px;border-radius:12px;margin-bottom:18px}label{display:block;color:#aab5c4;margin:10px 0 5px;font-size:13px}input,textarea,select{width:100%;padding:11px;background:#10141b;color:#fff;border:1px solid #404a58;border-radius:8px;font:inherit}textarea{min-height:80px}button{background:#313946;color:#fff;border:1px solid #475160;padding:10px 14px;border-radius:8px;cursor:pointer}button.primary{background:#d53e46;border-color:#d53e46}.row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.row>*{flex:1;min-width:180px}.muted{color:#a5afbd}.notice{color:#f3c978}.hidden{display:none}.items button{width:100%;text-align:left;margin:5px 0}#status{white-space:pre-wrap;padding:12px 0}.gallery{display:flex;flex-wrap:wrap;gap:8px}.gallery figure{margin:0;width:155px;border:1px solid #465264;border-radius:8px;overflow:hidden;background:#121720}.gallery img{width:100%;height:120px;object-fit:cover;display:block;cursor:zoom-in}.gallery figcaption{padding:6px;font-size:12px;overflow-wrap:anywhere}small{color:#a6b1c0}a{color:#f6a2a5}
  .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}.info-grid div{border:1px solid #374251;border-radius:9px;padding:11px;overflow-wrap:anywhere}.info-grid small{display:block;margin-bottom:5px}.doc-actions{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0} .doc-actions button{flex:0 1 auto}
@@ -9,7 +9,7 @@ body:has(#signIn:not(.hidden)){background:radial-gradient(ellipse at 50% -12%,#2
 #appHeader h1{font-weight:800;letter-spacing:.035em;font-size:19px}
 .header-divider{color:#67717f;margin:0 13px;font-weight:400}
 #headerSub{font-size:14px;color:#b7c0ce;font-weight:500;letter-spacing:0}
-#pilotTag{color:#8e99a9;border:1px solid #3b4552;border-radius:6px;padding:7px 9px;font-size:10px;letter-spacing:.13em;font-weight:700}
+._unusedHeaderTag{color:#8e99a9;border:1px solid #3b4552;border-radius:6px;padding:7px 9px;font-size:10px;letter-spacing:.13em;font-weight:700}
 .login-card{width:min(100%,450px);margin:clamp(48px,10vh,120px) auto 0;padding:42px 42px 28px;background:#1a202a;border:1px solid #364151;box-shadow:0 26px 80px #0005;border-radius:18px}
 .login-mark{width:68px;height:68px;border:1px solid #5a4148;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#fff;background:#27252b;font-size:24px;font-weight:900;letter-spacing:-.075em;margin-bottom:25px;position:relative}
 .mark-slash{position:absolute;left:11px;top:11px;bottom:11px;width:4px;background:#e33c46;transform:skew(-18deg);border-radius:3px}
@@ -27,8 +27,8 @@ body:has(#signIn:not(.hidden)){background:radial-gradient(ellipse at 50% -12%,#2
 .status-dot{width:7px;height:7px;background:#52bc91;border-radius:50%;box-shadow:0 0 0 3px #52bc9118}.login-footer-sep{color:#556274}
 body:has(#signIn:not(.hidden)) main{max-width:1100px}
 body:has(#signIn:not(.hidden)) #status{max-width:450px;margin:12px auto;color:#f5a6a9;text-align:center}
-@media(max-width:540px){.login-card{margin:30px auto;padding:29px 22px}.login-card h2{font-size:25px}#pilotTag{display:none}#appHeader{height:68px}}
-.system-tabs{display:flex;gap:9px;align-items:center;padding:12px 24px;background:#141923;border-bottom:1px solid #303949}.system-tabs button.active{background:#c83742;border-color:#c83742}.system-tabs .profile-mini{margin-left:auto;color:#bfc7d3}.full-system-frame{display:block;width:100%;height:calc(100vh - 165px);min-height:640px;border:0;background:#10141b}.demo-warning{padding:10px 24px;color:#f0c47c;background:#2a251b;font-size:12px}body:has(#fullSystem:not(.hidden)) main{max-width:none;padding:0}body:has(#demoDashboard:not(.hidden)) main{max-width:none;padding:0}.demo-warning{background:#332a1d;color:#ffe2a8;padding:9px 22px;font-size:12px}.full-system-frame{width:100%;height:calc(100vh - 142px);border:0;display:block}.server-dashboard{max-width:1280px;margin:0 auto;padding:24px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.metric{padding:20px;background:#202735;border-radius:12px;border:1px solid #3b4452}.metric strong{display:block;font-size:30px;margin-top:8px}.dashboard-content>*{min-width:320px;flex:1}.dashboard-content .card{max-height:none}@media(max-width:650px){.metrics{grid-template-columns:1fr}}body:has(#fullSystem:not(.hidden)) #workspace,body:has(#fullSystem:not(.hidden)) #detail{display:none}@media(max-width:650px){.system-tabs{flex-wrap:wrap}.system-tabs .profile-mini{width:100%;margin-left:0}.full-system-frame{height:calc(100vh - 200px)}}
+@media(max-width:540px){.login-card{margin:30px auto;padding:29px 22px}.login-card h2{font-size:25px}._unusedHeaderTag{display:none}#appHeader{height:68px}}
+.system-tabs{display:flex;gap:9px;align-items:center;padding:12px 24px;background:#141923;border-bottom:1px solid #303949}.system-tabs button.active{background:#c83742;border-color:#c83742}.system-tabs .profile-mini{margin-left:auto;color:#bfc7d3}.full-system-frame{display:block;width:100%;height:calc(100vh - 165px);min-height:640px;border:0;background:#10141b}body:has(#fullSystem:not(.hidden)) main{max-width:none;padding:0}.full-system-frame{width:100%;height:calc(100vh - 142px);border:0;display:block}.server-dashboard{max-width:1280px;margin:0 auto;padding:24px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.metric{padding:20px;background:#202735;border-radius:12px;border:1px solid #3b4452}.metric strong{display:block;font-size:30px;margin-top:8px}.dashboard-content>*{min-width:320px;flex:1}.dashboard-content .card{max-height:none}@media(max-width:650px){.metrics{grid-template-columns:1fr}}body:has(#fullSystem:not(.hidden)) #workspace,body:has(#fullSystem:not(.hidden)) #detail{display:none}@media(max-width:650px){.system-tabs{flex-wrap:wrap}.system-tabs .profile-mini{width:100%;margin-left:0}.full-system-frame{height:calc(100vh - 200px)}}
 
 #mainSidebar{position:fixed;top:118px;bottom:0;left:0;width:248px;overflow:auto;background:#171c25;border-right:1px solid #303845;padding:20px 12px;z-index:20}
 #mainSidebar.hidden{display:none}.sidebar-brand{padding:12px 12px 25px;display:flex;flex-direction:column;gap:4px;font-size:20px;letter-spacing:.04em}.sidebar-brand span{color:#ef4850}.sidebar-brand small{font-size:9px;letter-spacing:.22em;color:#91a0b1}
@@ -38,7 +38,7 @@ body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidde
 body:has(#mainSidebar:not(.hidden)) .server-dashboard{max-width:1450px;margin:0 auto}
 @media(max-width:850px){#mainSidebar{position:relative;top:auto;bottom:auto;width:auto;max-height:215px;display:flex;gap:6px;flex-wrap:wrap;padding:8px}.sidebar-brand,.side-sep{display:none}.side-link{width:auto;font-size:11px;padding:8px}.side-link:disabled{display:none}body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) main{margin-left:0}}
 </style></head><body>
-<header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1><span id="pilotTag">MOTO TECH</span></header>
+<header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1></header>
 <nav id="systemTabs" class="system-tabs hidden"><button id="openSystem" type="button" class="active">Главная</button><button id="openRepairs" type="button">Заказ-наряды и ремонт</button><button id="openStorage" type="button">Хранение мотоциклов</button><button id="openEmployees" type="button">Сотрудники</button><span id="staffMini" class="profile-mini"></span><button id="navLogout" type="button">Выйти</button></nav>
 <aside id="mainSidebar" class="hidden" aria-label="Разделы MOTO TECH">
 <div class="sidebar-brand"><strong>MOTO <span>TECH</span></strong><small>SERVICE MANAGEMENT</small></div>
@@ -86,7 +86,7 @@ body:has(#mainSidebar:not(.hidden)) .server-dashboard{max-width:1450px;margin:0 
      <button class="primary" type="submit">Создать заказ на сервере</button>
     </form></section>
   </div>
-  <p class="muted" style="font-size:12px">Остальные разделы будут подключены после проверки их серверной реализации. Старые демооперации отключены.</p>
+  <p class="muted" style="font-size:12px">Данные заказов, хранения и сотрудников загружаются с сервера. Недоступные разделы пока не активированы.</p>
  </div>
 </div>
 <main>
