@@ -15,10 +15,12 @@ import jwt
 from jwt import InvalidTokenError
 from pwdlib import PasswordHash
 from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form
+from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend.api.storage_rules import normalize_vin, validate_transition
+from backend.api import google_drive_storage
 
 pool = None
 password_hash = PasswordHash.recommended()
@@ -269,7 +271,8 @@ async def upload_storage_photo(
         raise HTTPException(422, "Damage description is required")
     if len(note) > 2000:
         raise HTTPException(422, "Photo note is too long")
-    root = private_photo_root()
+    if not google_drive_storage.configured():
+        raise HTTPException(503, 'Google Drive test storage not configured')
     raw = await photo.read(MAX_IMAGE_BYTES + 1)
     await photo.close()
     if not raw or len(raw) > MAX_IMAGE_BYTES:
@@ -290,16 +293,13 @@ async def upload_storage_photo(
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
         raise HTTPException(415, "Invalid image")
     photo_id = uuid.uuid4()
-    relative = f"{contract_id}/{photo_id}.jpg"
-    directory = root / str(contract_id)
-    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-    target = directory / f"{photo_id}.jpg"
-    temp = directory / f".{photo_id}.{secrets.token_hex(8)}.tmp"
+    # Keep network-bound Drive operations outside SQL transaction, with cleanup on failure.
+    object_key = None
     try:
-        with temp.open("xb") as output:
-            output.write(data)
-        os.chmod(temp, 0o600)
-        os.replace(temp, target)
+        object_key = await run_in_threadpool(
+            google_drive_storage.upload_private_image,
+            data, f"{contract_id}-{photo_id}.jpg"
+        )
         async with db.acquire() as c:
             async with c.transaction():
                 contract = await c.fetchrow("SELECT id,status FROM storage_contracts WHERE id=$1 FOR UPDATE", contract_id)
@@ -310,16 +310,18 @@ async def upload_storage_photo(
                 await c.execute("""INSERT INTO storage_photos
                      (id,contract_id,kind,object_key,sha256,mime_type,size_bytes,note,uploaded_by)
                      VALUES($1,$2,$3,$4,$5,'image/jpeg',$6,$7,$8)""",
-                     photo_id, contract_id, kind, relative,
+                     photo_id, contract_id, kind, object_key,
                      hashlib.sha256(data).hexdigest(), len(data), note.strip(), person["id"])
                 await c.execute("""INSERT INTO storage_events(contract_id,event_type,actor_id,payload)
                     VALUES($1,'photo_added',$2,$3::jsonb)""",contract_id,person["id"],
                     json.dumps({"photo_id":str(photo_id),"kind":kind}))
     except Exception:
-        target.unlink(missing_ok=True)
+        if object_key:
+            try:
+                await run_in_threadpool(google_drive_storage.remove_private_image, object_key)
+            except Exception:
+                pass  # Cleanup failure is logged for later orphan-file reconciliation.
         raise
-    finally:
-        temp.unlink(missing_ok=True)
     return {"id":photo_id,"kind":kind,"note":note.strip()}
 
 class IntakeConfirmation(BaseModel):
@@ -345,8 +347,10 @@ async def accept_storage(
                 raise HTTPException(422, "Document the motorcycle body condition")
             photos = await c.fetch("""SELECT kind,note,object_key FROM storage_photos
                 WHERE contract_id=$1 AND deleted_at IS NULL""", contract_id)
-            root = private_photo_root()
-            if not all((root / row["object_key"]).is_file() for row in photos):
+            if not google_drive_storage.configured():
+                raise HTTPException(503, "Google Drive storage not configured")
+            checks = await run_in_threadpool(lambda: all(google_drive_storage.photo_exists(row["object_key"]) for row in photos))
+            if not checks:
                 raise HTTPException(409, "One or more uploaded photos are missing")
             try:
                 validate_transition(contract["status"], "stored", [dict(row) for row in photos])
