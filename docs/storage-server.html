@@ -92,8 +92,24 @@ async function openRecord(id){
  }catch(e){status(e.message)}
 }
 $('upload').onsubmit=async e=>{
- e.preventDefault();if(!current)return;const data=new FormData(e.target);
- try{await request('/storage/'+current.id+'/photos',{method:'POST',form:data});e.target.reset();await openRecord(current.id);status('Фото сохранено на сервере.')}catch(err){status(err.message)}
+ e.preventDefault();
+ if(!current)return;
+ const form=e.currentTarget, submit=form.querySelector('button[type="submit"]');
+ const kind=form.elements.kind.value, file=form.elements.photo.files[0];
+ if(!file){status('Сначала выберите фотографию.');return}
+ const data=new FormData(form);
+ submit.disabled=true;
+ status('Загружаю фото '+kind+'…');
+ try{
+  const recordId=current.id;
+  await request('/storage/'+recordId+'/photos',{method:'POST',form:data});
+  form.elements.photo.value='';
+  form.elements.note.value='';
+  // Preserve the chosen angle; reset() incorrectly selected front each time.
+  await openRecord(recordId);
+  status('Фото '+kind+' сохранено. Ранее загруженные фотографии остаются в карточке.');
+ }catch(err){status('Не удалось загрузить фото: '+err.message)}
+ finally{submit.disabled=false}
 };
 $('accept').onclick=async()=>{
  if(!current)return;try{
