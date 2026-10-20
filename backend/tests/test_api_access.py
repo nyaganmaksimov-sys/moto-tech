@@ -33,5 +33,22 @@ class AccessTests(unittest.TestCase):
                   "condition_at_return": "Inspected at handover",
                   "all_keys_returned": True, "documents_returned": True}).status_code, 503)
 
+    def test_photo_upload_requires_database(self):
+        contract_id = "00000000-0000-0000-0000-000000000000"
+        response = self.client.post(
+            f"/storage/{contract_id}/photos",
+            data={"kind": "front", "note": "Test"},
+            files={"photo": ("test.jpg", b"not-a-photo", "image/jpeg")},
+        )
+        self.assertEqual(response.status_code, 503)
+
+    def test_acceptance_requires_database(self):
+        contract_id = "00000000-0000-0000-0000-000000000000"
+        response = self.client.post(
+            f"/storage/{contract_id}/accept",
+            json={"version": 1, "condition_confirmed": True},
+        )
+        self.assertEqual(response.status_code, 503)
+
 if __name__ == "__main__":
     unittest.main()
