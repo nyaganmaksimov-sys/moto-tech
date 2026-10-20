@@ -132,6 +132,11 @@ async def run():
                 await connection.execute((base / "014_equipment_assets.sql").read_text(encoding="utf-8"))
                 print("Applied: 014_equipment_assets.sql")
             print("Equipment inventory schema checks passed")
+            if not await connection.fetchval("""SELECT EXISTS(SELECT 1 FROM information_schema.columns
+                   WHERE table_name='equipment_assets' AND column_name='estimated_value_rub')"""):
+                await connection.execute((base / "015_equipment_valuation.sql").read_text(encoding="utf-8"))
+                print("Applied: 015_equipment_valuation.sql")
+            print("Equipment valuation schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
