@@ -191,8 +191,21 @@ let clientsCache=[];
 async function refreshFleet(){
  const [clients,vehicles]=await Promise.all([request('/clients'),request('/vehicles')]);
  clientsCache=clients;const list=$('clientsList'),cars=$('vehiclesList'),choice=$('vehicleClient');list.replaceChildren();cars.replaceChildren();choice.replaceChildren();
- for(const c of clients){const item=document.createElement('p');item.textContent=c.full_name+' · '+(c.phone||'без телефона');item.dataset.query=(c.full_name+' '+(c.phone||'')).toLowerCase();list.append(item);const opt=document.createElement('option');opt.value=c.id;opt.textContent=c.full_name;choice.append(opt)}
- for(const v of vehicles){const item=document.createElement('p');item.textContent=v.owner_name+' — '+v.brand+' '+v.model+(v.vin?' · '+v.vin:'');cars.append(item)}
+ for(const c of clients){const item=document.createElement('p');item.textContent=c.full_name+' · '+(c.phone||'без телефона');item.dataset.query=(c.full_name+' '+(c.phone||'')).toLowerCase();list.append(item);
+ const edit=document.createElement('button');edit.type='button';edit.textContent='Изменить';edit.onclick=async()=>{
+  const full_name=prompt('ФИО клиента',c.full_name);if(full_name===null)return;
+  const phone=prompt('Телефон',c.phone||'');if(phone===null)return;
+  const email=prompt('Email',c.email||'');if(email===null)return;
+  try{await request('/clients/'+c.id,{method:'PATCH',body:{full_name,phone,email,notes:c.notes||''}});await refreshFleet();status('Карточка клиента обновлена')}catch(err){status(err.message)}
+ };item.append(' ',edit);
+ const opt=document.createElement('option');opt.value=c.id;opt.textContent=c.full_name;choice.append(opt)}
+ for(const v of vehicles){const item=document.createElement('p');item.textContent=v.owner_name+' — '+v.brand+' '+v.model+(v.vin?' · '+v.vin:'');cars.append(item);const edit=document.createElement('button');edit.textContent='Изменить';edit.type='button';edit.onclick=async()=>{
+  const brand=prompt('Марка',v.brand);if(brand===null)return;
+  const model=prompt('Модель',v.model);if(model===null)return;
+  const vin=prompt('VIN / рама',v.vin||'');if(vin===null)return;
+  const plate=prompt('Госномер',v.plate||'');if(plate===null)return;
+  try{await request('/vehicles/'+v.id,{method:'PATCH',body:{client_id:v.client_id,vehicle_type:v.vehicle_type,brand,model,year:v.year,vin,plate,notes:v.notes||''}});await refreshFleet();status('Данные техники обновлены')}catch(err){status(err.message)}
+ };item.append(' ',edit)}
  if(!clients.length)list.textContent='Клиентов пока нет';if(!vehicles.length)cars.textContent='Техника пока не добавлена';
 }
 $('clientSearch').oninput=()=>{const q=$('clientSearch').value.toLowerCase();$('clientsList').querySelectorAll('p').forEach(el=>el.classList.toggle('hidden',!el.dataset.query.includes(q)))};
