@@ -688,9 +688,11 @@ async def login_with_pin(payload:PinDeviceLogin,db=Depends(database)):
                 await c.execute("""UPDATE staff_pin_devices SET failures=failures+1,
                     locked_until=CASE WHEN failures+1>=5 THEN now()+interval '15 minutes'
                     ELSE NULL END WHERE id=$1""",row["id"])
-                raise HTTPException(401,"Неверный PIN-код")
-            await c.execute("""UPDATE staff_pin_devices SET failures=0,locked_until=NULL,
-                              last_used_at=now() WHERE id=$1""",row["id"])
+            else:
+                await c.execute("""UPDATE staff_pin_devices SET failures=0,locked_until=NULL,
+                                  last_used_at=now() WHERE id=$1""",row["id"])
+    if not valid:
+        raise HTTPException(401,"Неверный PIN-код")
     now=datetime.now(timezone.utc)
     token=jwt.encode({"sub":str(row["employee_id"]),"iat":now,
                       "exp":now+timedelta(hours=8)},JWT_SECRET,algorithm=ALGORITHM)
