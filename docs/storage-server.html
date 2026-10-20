@@ -114,6 +114,8 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
  </div>
 </div>
 <main>
+<section class="card login-card hidden" id="pinLogin"><div class="login-mark"><span class="mark-slash"></span><span>MT</span></div><h2>Быстрый вход</h2><p id="pinDeviceInfo" class="login-subtitle">Введите личный PIN-код сотрудника</p><form id="pinLoginForm"><label for="quickPin">PIN-код (6 цифр)</label><input id="quickPin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" autocomplete="off" required><button class="primary login-submit" type="submit">Войти по PIN →</button></form><p><button id="pinFullLogin" type="button">Войти по логину и паролю</button></p></section>
+<section class="card login-card hidden" id="pinSetup"><h2>Настройка быстрого входа</h2><p class="login-subtitle">Создайте личный PIN из 6 цифр для последующих входов на этом устройстве.</p><form id="pinSetupForm"><label>Придумайте PIN</label><input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="new-password"><label>Повторите PIN</label><input name="confirm_pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="new-password"><button class="primary" type="submit">Сохранить PIN</button></form><button id="pinSkip" type="button">Пока входить по паролю</button></section>
 <section class="card login-card" id="signIn">
  <div class="login-mark"><span class="mark-slash"></span><span>MT</span></div>
  <div class="login-eyebrow">MOTO TECH · WORKSPACE</div>
@@ -158,11 +160,14 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 'use strict';
 const $=id=>document.getElementById(id);
 let base='https://moto-tech-service-api.onrender.com',token='',current=null,staffRole='',staffId=null;
+const PIN_DEVICE_KEY='mototech:pinDevice:v1';
+let authProfile=null;
 const statusRu={draft:'Черновик',stored:'На хранении',return_requested:'Запрошена выдача',returned:'Выдан',cancelled:'Отменён'};
 const kindRu={front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',vin:'VIN',dashboard:'Приборная панель',damage:'Повреждение',pts:'ПТС',other:'Другое'};
 function status(message){$('status').textContent=message}
 function setSignedIn(on){
  $('signIn').classList.toggle('hidden',on);
+ if(on){$('pinLogin').classList.add('hidden');$('pinSetup').classList.add('hidden')}
  $('systemTabs').classList.toggle('hidden',!on);
  $('mainSidebar').classList.toggle('hidden',!on);
  if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen','fleetScreen'])$(id).classList.add('hidden');current=null}
@@ -257,6 +262,44 @@ $('showPassword').onclick=()=>{
  field.type=visible?'text':'password';
  $('showPassword').textContent=visible?'Скрыть':'Показать';
 };
+function loadPinDevice(){try{return JSON.parse(localStorage.getItem(PIN_DEVICE_KEY)||'null')}catch{return null}}
+function initializePinEntry(){
+ const saved=loadPinDevice();
+ $('pinLogin').classList.toggle('hidden',!saved);
+ $('signIn').classList.toggle('hidden',!!saved);
+ $('pinDeviceInfo').textContent=saved?'Личный PIN для '+saved.username:'Введите PIN-код';
+}
+async function enterWorkspace(me){
+ staffRole=me.role;staffId=me.id;authProfile=me;
+ $('profile').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':me.role);
+ await refresh();setSignedIn(true);$('staffMini').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':'Сотрудник');switchSystem('full');$('headerSub').textContent='Рабочая система';
+ status('Вы вошли в систему.');
+}
+$('pinLoginForm').onsubmit=async e=>{
+ e.preventDefault();const device=loadPinDevice();if(!device){initializePinEntry();return}
+ const button=e.currentTarget.querySelector('button');button.disabled=true;
+ try{
+  const response=await fetch(base+'/auth/pin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_token:device.token,pin:$('quickPin').value}),cache:'no-store'});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(data.detail||'Не удалось выполнить вход по PIN');
+  token=data.access_token;$('quickPin').value='';await enterWorkspace(await request('/auth/me'));
+ }catch(err){status(err.message)}
+ finally{button.disabled=false}
+};
+$('pinFullLogin').onclick=()=>{$('pinLogin').classList.add('hidden');$('signIn').classList.remove('hidden');status('')};
+$('pinSetupForm').onsubmit=async e=>{
+ e.preventDefault();const values=new FormData(e.currentTarget),pin=values.get('pin');
+ if(pin!==values.get('confirm_pin')){status('PIN-коды не совпадают');return}
+ const button=e.currentTarget.querySelector('button');button.disabled=true;
+ try{
+  const result=await request('/auth/pin/enroll',{method:'POST',body:{pin,label:'Основной браузер'}});
+  localStorage.setItem(PIN_DEVICE_KEY,JSON.stringify({token:result.device_token,username:authProfile.username}));
+  e.currentTarget.reset();await enterWorkspace(authProfile);
+ }catch(err){status('PIN не сохранён: '+err.message)}
+ finally{button.disabled=false}
+};
+$('pinSkip').onclick=()=>enterWorkspace(authProfile).catch(err=>status(err.message));
+initializePinEntry();
 $('loginForm').onsubmit=async event=>{
  event.preventDefault();
  const submit=$('login');submit.disabled=true;submit.textContent='Выполняется вход…';status('');
@@ -266,14 +309,15 @@ $('loginForm').onsubmit=async event=>{
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw Error(response.status===401?'Неверный логин или пароль':typeof data.detail==='string'?data.detail:'Не удалось войти');
   token=data.access_token;$('password').value='';
-  const me=await request('/auth/me');staffRole=me.role;staffId=me.id;
-  $('profile').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':me.role);
-  await refresh();setSignedIn(true);$('staffMini').textContent=me.full_name+' · Руководитель';switchSystem('full');$('headerSub').textContent='Рабочая система';
-  status('Вы вошли в систему.');
+  const me=await request('/auth/me');authProfile=me;
+  const device=loadPinDevice();
+  if(device && device.username===me.username){await enterWorkspace(me)}
+  else{$('signIn').classList.add('hidden');$('pinSetup').classList.remove('hidden');status('Настройте PIN для быстрого входа или пропустите этот шаг.')}
+
  }catch(e){token='';setSignedIn(false);status(e.message)}
  finally{submit.disabled=false;submit.textContent='Войти в систему →'}
 };
-$('logout').onclick=()=>{token='';setSignedIn(false);$('headerSub').textContent='Сервисная платформа';status('Сеанс завершён')};
+$('logout').onclick=()=>{token='';setSignedIn(false);$('headerSub').textContent='Сервисная платформа';initializePinEntry();status('Сеанс завершён')};
 async function refresh(){
  const rows=await request('/storage');$('records').replaceChildren();
  if(!rows.length)$('records').textContent='Карточек пока нет';
