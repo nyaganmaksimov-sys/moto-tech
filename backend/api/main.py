@@ -1136,3 +1136,29 @@ async def repair_work_add(repair_id:uuid.UUID,payload:RepairWorkInput,
             await c.execute("""INSERT INTO repair_order_events(order_id,actor_id,event_type)
                  VALUES($1,$2,'work_added')""",repair_id,person["id"])
     return dict(row)
+
+@app.get("/repairs/{repair_id}/statement")
+async def repair_statement(repair_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        order=await c.fetchrow("SELECT * FROM repair_orders WHERE id=$1",repair_id)
+        if not order:raise HTTPException(404,"Заказ не найден")
+        works=await c.fetch("""SELECT description,quantity,unit_price_rub
+              FROM repair_work_items WHERE repair_id=$1 ORDER BY created_at""",repair_id)
+        parts=await c.fetch("""SELECT p.sku,p.name,p.sale_price,m.delta,m.reason
+              FROM inventory_movements m JOIN inventory_parts p ON p.id=m.part_id
+              WHERE m.repair_id=$1 AND m.delta<0 ORDER BY m.created_at""",repair_id)
+        payments=await c.fetch("""SELECT amount_rub,category,entry_type,created_at
+              FROM service_finance_entries WHERE repair_id=$1 ORDER BY created_at""",repair_id)
+    work_total=sum((r["quantity"]*r["unit_price_rub"] for r in works),Decimal("0"))
+    parts_total=sum((-r["delta"]*r["sale_price"] for r in parts),Decimal("0"))
+    # The initial order amount is a legacy/estimated value and must not be added again.
+    payable=work_total+parts_total
+    paid=sum((r["amount_rub"] if r["entry_type"]=="income" else -r["amount_rub"]
+              for r in payments),Decimal("0"))
+    return {"order":dict(order),"works":[dict(x) for x in works],
+       "parts":[dict(x) for x in parts],
+       "payments":[dict(x) for x in payments] if person["role"] in ("owner_manager","manager","administrator") else [],
+       "totals":{"works":work_total,"parts":parts_total,"payable":payable,
+         "paid":paid if person["role"] in ("owner_manager","manager","administrator") else None,
+         "balance":payable-paid if person["role"] in ("owner_manager","manager","administrator") else None},
+       "note":"Оценка по текущим ценам деталей; для окончательного акта нужны фиксированные цены списания"}
