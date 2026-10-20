@@ -72,6 +72,13 @@ async def run():
                 await connection.execute((base / "004_employee_positions.sql").read_text(encoding="utf-8"))
                 print("Applied: 004_employee_positions.sql")
             print("Employee schema checks passed")
+            if not await connection.fetchval("SELECT to_regclass('public.service_clients')"):
+                await connection.execute((base / "005_clients_vehicles.sql").read_text(encoding="utf-8"))
+                print("Applied: 005_clients_vehicles.sql")
+            for table in ("service_clients","service_vehicles"):
+                if not await connection.fetchval("SELECT to_regclass($1)","public."+table):
+                    raise RuntimeError("Missing table: "+table)
+            print("Clients and vehicles schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
