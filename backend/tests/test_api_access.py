@@ -24,5 +24,14 @@ class AccessTests(unittest.TestCase):
     def test_no_unverified_photo_endpoint(self):
         self.assertEqual(self.client.post("/storage/00000000-0000-0000-0000-000000000000/photos", json={}).status_code, 404)
 
+    def test_handover_requires_backend(self):
+        ident = "00000000-0000-0000-0000-000000000000"
+        self.assertEqual(self.client.post(f"/storage/{ident}/request-return",
+            json={"version": 1, "note": "demo"}).status_code, 503)
+        self.assertEqual(self.client.post(f"/storage/{ident}/handover",
+            json={"version": 1, "received_by": "Demo Client",
+                  "condition_at_return": "Inspected at handover",
+                  "all_keys_returned": True, "documents_returned": True}).status_code, 503)
+
 if __name__ == "__main__":
     unittest.main()
