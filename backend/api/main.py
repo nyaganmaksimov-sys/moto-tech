@@ -1075,3 +1075,27 @@ async def one_c_dry_run(entity_type:str,person=Depends(require_roles("owner_mana
             "sample_count":len(result),"mapped_count":sum(x["action"]=="update_candidate" for x in result),
             "unmapped_count":sum(x["action"]=="create_candidate" for x in result),
             "operations":result}
+
+class RepairAssignment(BaseModel):
+    mechanic_id: uuid.UUID | None = None
+    version: int = Field(ge=1)
+
+@app.patch("/repairs/{repair_id}/mechanic")
+async def assign_repair_mechanic(repair_id:uuid.UUID,payload:RepairAssignment,
+   person=Depends(require_roles("owner_manager","administrator","manager")),db=Depends(database)):
+    async with db.acquire() as c:
+        async with c.transaction():
+            mechanic_name=None
+            if payload.mechanic_id:
+                employee=await c.fetchrow("""SELECT full_name,role FROM service_employees
+                   WHERE id=$1 AND active=true""",payload.mechanic_id)
+                if not employee:raise HTTPException(404,"Сотрудник не найден или неактивен")
+                mechanic_name=employee["full_name"]
+            updated=await c.fetchrow("""UPDATE repair_orders SET mechanic_id=$2,
+               mechanic_name=$3,updated_by=$4,version=version+1,updated_at=now()
+               WHERE id=$1 AND version=$5 AND status NOT IN ('issued','cancelled') RETURNING *""",
+               repair_id,payload.mechanic_id,mechanic_name,person["id"],payload.version)
+            if not updated:raise HTTPException(409,"Заказ изменён другим сотрудником или закрыт. Обновите список")
+            await c.execute("""INSERT INTO repair_order_events(order_id,actor_id,event_type)
+                  VALUES($1,$2,'mechanic_assigned')""",repair_id,person["id"])
+    return dict(updated)
