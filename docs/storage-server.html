@@ -29,9 +29,37 @@ body:has(#signIn:not(.hidden)) main{max-width:1100px}
 body:has(#signIn:not(.hidden)) #status{max-width:450px;margin:12px auto;color:#f5a6a9;text-align:center}
 @media(max-width:540px){.login-card{margin:30px auto;padding:29px 22px}.login-card h2{font-size:25px}#pilotTag{display:none}#appHeader{height:68px}}
 .system-tabs{display:flex;gap:9px;align-items:center;padding:12px 24px;background:#141923;border-bottom:1px solid #303949}.system-tabs button.active{background:#c83742;border-color:#c83742}.system-tabs .profile-mini{margin-left:auto;color:#bfc7d3}.full-system-frame{display:block;width:100%;height:calc(100vh - 165px);min-height:640px;border:0;background:#10141b}.demo-warning{padding:10px 24px;color:#f0c47c;background:#2a251b;font-size:12px}body:has(#fullSystem:not(.hidden)) main{max-width:none;padding:0}body:has(#demoDashboard:not(.hidden)) main{max-width:none;padding:0}.demo-warning{background:#332a1d;color:#ffe2a8;padding:9px 22px;font-size:12px}.full-system-frame{width:100%;height:calc(100vh - 142px);border:0;display:block}.server-dashboard{max-width:1280px;margin:0 auto;padding:24px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0}.metric{padding:20px;background:#202735;border-radius:12px;border:1px solid #3b4452}.metric strong{display:block;font-size:30px;margin-top:8px}.dashboard-content>*{min-width:320px;flex:1}.dashboard-content .card{max-height:none}@media(max-width:650px){.metrics{grid-template-columns:1fr}}body:has(#fullSystem:not(.hidden)) #workspace,body:has(#fullSystem:not(.hidden)) #detail{display:none}@media(max-width:650px){.system-tabs{flex-wrap:wrap}.system-tabs .profile-mini{width:100%;margin-left:0}.full-system-frame{height:calc(100vh - 200px)}}
+
+#mainSidebar{position:fixed;top:118px;bottom:0;left:0;width:248px;overflow:auto;background:#171c25;border-right:1px solid #303845;padding:20px 12px;z-index:20}
+#mainSidebar.hidden{display:none}.sidebar-brand{padding:12px 12px 25px;display:flex;flex-direction:column;gap:4px;font-size:20px;letter-spacing:.04em}.sidebar-brand span{color:#ef4850}.sidebar-brand small{font-size:9px;letter-spacing:.22em;color:#91a0b1}
+.side-link{width:100%;text-align:left;background:transparent;border:0;border-left:3px solid transparent;margin:3px 0;padding:12px 10px;border-radius:6px;font-size:13px}
+.side-link.active{background:#43262f;border-left-color:#e3404a}.side-link:disabled{opacity:.46;cursor:not-allowed}.side-sep{padding:20px 12px 7px;color:#8b96a7;font-size:11px}
+body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) main{margin-left:248px}
+body:has(#mainSidebar:not(.hidden)) .server-dashboard{max-width:1450px;margin:0 auto}
+@media(max-width:850px){#mainSidebar{position:relative;top:auto;bottom:auto;width:auto;max-height:215px;display:flex;gap:6px;flex-wrap:wrap;padding:8px}.sidebar-brand,.side-sep{display:none}.side-link{width:auto;font-size:11px;padding:8px}.side-link:disabled{display:none}body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) main{margin-left:0}}
 </style></head><body>
 <header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1><span id="pilotTag">MOTO TECH</span></header>
 <nav id="systemTabs" class="system-tabs hidden"><button id="openSystem" type="button" class="active">Главная</button><button id="openRepairs" type="button">Заказ-наряды и ремонт</button><button id="openStorage" type="button">Хранение мотоциклов</button><button id="openEmployees" type="button">Сотрудники</button><span id="staffMini" class="profile-mini"></span><button id="navLogout" type="button">Выйти</button></nav>
+<aside id="mainSidebar" class="hidden" aria-label="Разделы MOTO TECH">
+<div class="sidebar-brand"><strong>MOTO <span>TECH</span></strong><small>SERVICE MANAGEMENT</small></div>
+<button data-target="full" class="side-link active">▦ Главная</button>
+<button data-target="repairs" class="side-link">＋ Быстрый заказ</button>
+<button data-target="repairs" class="side-link">▤ Заказ-наряды</button>
+<button data-target="storage" class="side-link">▣ Хранение мотоциклов</button>
+<button data-target="employees" class="side-link">♙ Сотрудники</button>
+<div class="side-sep">Другие разделы</div>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">✓ Выданная техника</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">◇ Гарантийные обращения</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">▦ Запись и посты</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">▥ Доска заказов</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">≡ Прайс-лист</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">◇ Клиенты и техника</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">▣ Склад и запчасти</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">▧ Заявки на запчасти</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">▥ Поставщики</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">₽ Финансы</button>
+<button class="side-link" disabled title="Ожидает подключения к общей базе">⚙ Настройки</button>
+</aside>
 <section id="employeesScreen" class="hidden"><div class="server-dashboard"><h2>Сотрудники MOTO TECH</h2><p class="muted">Учётные записи сотрудников из PostgreSQL</p><div class="row dashboard-content"><div class="card"><h3>Список сотрудников</h3><div id="employeeList"></div></div>
 <div id="newEmployeePanel" class="card hidden"><h3>Добавить сотрудника</h3><form id="employeeCreate">
 <label>ФИО</label><input name="full_name" required minlength="3" maxlength="250" autocomplete="off">
@@ -112,6 +140,7 @@ function status(message){$('status').textContent=message}
 function setSignedIn(on){
  $('signIn').classList.toggle('hidden',on);
  $('systemTabs').classList.toggle('hidden',!on);
+ $('mainSidebar').classList.toggle('hidden',!on);
  if(!on){for(const id of ['workspace','fullSystem','detail','employeesScreen'])$(id).classList.add('hidden');current=null}
 }
 function switchSystem(view){
@@ -122,6 +151,7 @@ function switchSystem(view){
  $('detail').classList.toggle('hidden',!storage||!current);
  $('employeesScreen').classList.toggle('hidden',!employees);
  for(const [id,active] of [['openSystem',home],['openRepairs',repairs],['openStorage',storage],['openEmployees',employees]])$(id).classList.toggle('active',active);
+ document.querySelectorAll('#mainSidebar [data-target]').forEach(b=>b.classList.toggle('active',b.dataset.target===view));
  if(home||repairs)refreshRepairs().catch(e=>status(e.message));
  if(employees)refreshEmployees().catch(e=>status(e.message));
 }
@@ -143,6 +173,7 @@ $('employeeCreate').onsubmit=async event=>{
  }catch(err){status('Не удалось добавить сотрудника: '+err.message)}
  finally{btn.disabled=false}
 };
+document.querySelectorAll('#mainSidebar [data-target]').forEach(b=>b.onclick=()=>switchSystem(b.dataset.target));
 $('openSystem').onclick=()=>switchSystem('full');
 $('openRepairs').onclick=()=>switchSystem('repairs');
 $('openStorage').onclick=()=>switchSystem('storage');
