@@ -22,6 +22,7 @@ try{currentAdminRole=localStorage.getItem(ROLE_PREVIEW_KEY)==='administrator'?'a
 const MANAGER_ONLY_SECTIONS=[];
 function setAdminRolePreview(role){if(cloudStaffProfile)return;currentAdminRole=role==='administrator'?'administrator':'manager';try{localStorage.setItem(ROLE_PREVIEW_KEY,currentAdminRole)}catch(e){}applyAdminRolePreview();renderNotifications();const current=document.querySelector('main section.show');if(current&&MANAGER_ONLY_SECTIONS.includes(current.id)&&currentAdminRole==='administrator')view('home')}
 function applyAdminRolePreview(){
+ if(cloudStaffProfile?.role==='mechanic'){enforceCloudRole();return}
  const selector=$('adminRolePreview');if(selector)selector.value=currentAdminRole;
  const limited=currentAdminRole==='administrator'&&!document.body.classList.contains('mechanic-workspace');
  document.querySelectorAll('aside button').forEach(b=>{const target=b.getAttribute('onclick')||'';b.style.display=limited&&MANAGER_ONLY_SECTIONS.some(id=>target.includes("'"+id+"'"))?'none':''});
