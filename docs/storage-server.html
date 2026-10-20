@@ -296,7 +296,7 @@ $('pinLoginForm').onsubmit=async e=>{
 };
 $('pinFullLogin').onclick=()=>{$('pinLogin').classList.add('hidden');$('signIn').classList.remove('hidden');status('')};
 $('pinSetupForm').onsubmit=async e=>{
- e.preventDefault();const values=new FormData(e.currentTarget),pin=values.get('pin');
+ e.preventDefault();const form=e.currentTarget;const values=new FormData(form),pin=values.get('pin');
  if(pin!==values.get('confirm_pin')){status('PIN-коды не совпадают');return}
  const button=e.currentTarget.querySelector('button');button.disabled=true;
  try{
@@ -304,7 +304,7 @@ $('pinSetupForm').onsubmit=async e=>{
   const old=loadPinDevice();
   localStorage.setItem(PIN_DEVICE_KEY,JSON.stringify({token:result.device_token,username:authProfile.username}));
   if(old?.token){request('/auth/pin/revoke',{method:'POST',body:{device_token:old.token}}).catch(()=>{})}
-  e.currentTarget.reset();await enterWorkspace(authProfile);
+  form.reset();await enterWorkspace(authProfile);
  }catch(err){status('PIN не сохранён: '+err.message)}
  finally{button.disabled=false}
 };
