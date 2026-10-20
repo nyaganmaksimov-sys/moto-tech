@@ -601,3 +601,45 @@ async def add_vehicle(payload:VehicleCreate,person=Depends(require_roles(*ROLES)
             raise HTTPException(409,"Техника с таким VIN уже существует")
         except asyncpg.ForeignKeyViolationError:
             raise HTTPException(422,"Владелец не найден")
+
+class EmployeeUpdate(BaseModel):
+    full_name: str = Field(min_length=3,max_length=250)
+    position: str = Field(min_length=2,max_length=150)
+    role: str
+    active: bool
+
+class EmployeePasswordReset(BaseModel):
+    new_password: str = Field(min_length=14,max_length=128)
+
+@app.patch("/employees/{employee_id}")
+async def edit_employee(employee_id:uuid.UUID,payload:EmployeeUpdate,
+    person=Depends(require_roles("owner_manager","administrator")),db=Depends(database)):
+    if payload.role not in ROLES:raise HTTPException(422,"Недопустимая роль")
+    async with db.acquire() as c:
+        async with c.transaction():
+            current=await c.fetchrow("SELECT id,role,active FROM service_employees WHERE id=$1 FOR UPDATE",employee_id)
+            if not current:raise HTTPException(404,"Сотрудник не найден")
+            if current["role"]=="owner_manager" and person["id"]!=employee_id:
+                raise HTTPException(403,"Нельзя изменять аккаунт владельца")
+            if payload.role=="owner_manager" and person["role"]!="owner_manager":
+                raise HTTPException(403,"Только владелец может назначить владельца")
+            if employee_id==person["id"] and (not payload.active or payload.role!=current["role"]):
+                raise HTTPException(409,"Нельзя отключить собственный доступ или изменить собственную роль")
+            row=await c.fetchrow("""UPDATE service_employees SET full_name=$2,position=$3,role=$4,active=$5
+                     WHERE id=$1 RETURNING id,username,full_name,position,role,active,created_at""",
+                     employee_id,payload.full_name.strip(),payload.position.strip(),payload.role,payload.active)
+    return dict(row)
+
+@app.post("/employees/{employee_id}/reset-password")
+async def reset_employee_password(employee_id:uuid.UUID,payload:EmployeePasswordReset,
+    person=Depends(require_roles("owner_manager","administrator")),db=Depends(database)):
+    if employee_id==person["id"]:
+        raise HTTPException(409,"Смените собственный пароль через настройки профиля")
+    async with db.acquire() as c:
+        target=await c.fetchrow("SELECT id,role FROM service_employees WHERE id=$1",employee_id)
+        if not target:raise HTTPException(404,"Сотрудник не найден")
+        if target["role"]=="owner_manager":
+            raise HTTPException(403,"Сброс пароля владельца недоступен")
+        hashed=await run_in_threadpool(password_hash.hash,payload.new_password)
+        await c.execute("UPDATE service_employees SET password_hash=$2 WHERE id=$1",employee_id,hashed)
+    return {"ok":True}
