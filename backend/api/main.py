@@ -1162,3 +1162,58 @@ async def repair_statement(repair_id:uuid.UUID,person=Depends(require_roles(*ROL
          "paid":paid if person["role"] in ("owner_manager","manager","administrator") else None,
          "balance":payable-paid if person["role"] in ("owner_manager","manager","administrator") else None},
        "note":"Оценка по текущим ценам деталей; для окончательного акта нужны фиксированные цены списания"}
+
+class EquipmentInput(BaseModel):
+    inventory_number: str = Field(min_length=1,max_length=80)
+    name: str = Field(min_length=2,max_length=250)
+    category: str = Field(default="Оборудование",max_length=120)
+    serial_number: str | None = Field(default=None,max_length=180)
+    manufacturer: str | None = Field(default=None,max_length=150)
+    model: str | None = Field(default=None,max_length=150)
+    location: str | None = Field(default=None,max_length=250)
+    custodian_id: uuid.UUID | None = None
+    condition: str = "working"
+    notes: str | None = Field(default=None,max_length=3000)
+
+class EquipmentAuditInput(BaseModel):
+    result: str
+    comment: str | None = Field(default=None,max_length=2000)
+
+@app.get("/equipment")
+async def equipment_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("""SELECT a.*,e.full_name AS custodian_name
+           FROM equipment_assets a LEFT JOIN service_employees e ON e.id=a.custodian_id
+           ORDER BY a.inventory_number LIMIT 1000""")]
+
+@app.post("/equipment",status_code=201)
+async def equipment_create(payload:EquipmentInput,person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    if payload.condition not in ("working","maintenance","broken","retired"):
+        raise HTTPException(422,"Неверное состояние оборудования")
+    async with db.acquire() as c:
+        try:
+            return dict(await c.fetchrow("""INSERT INTO equipment_assets
+              (inventory_number,name,category,serial_number,manufacturer,model,location,custodian_id,condition,notes)
+              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *""",
+              payload.inventory_number.strip(),payload.name.strip(),payload.category,
+              payload.serial_number,payload.manufacturer,payload.model,payload.location,
+              payload.custodian_id,payload.condition,payload.notes))
+        except asyncpg.UniqueViolationError:raise HTTPException(409,"Инвентарный номер уже существует")
+        except asyncpg.ForeignKeyViolationError:raise HTTPException(422,"Ответственный сотрудник не найден")
+
+@app.post("/equipment/{asset_id}/audit",status_code=201)
+async def equipment_audit(asset_id:uuid.UUID,payload:EquipmentAuditInput,
+    person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    if payload.result not in ("present","missing","damaged"):
+        raise HTTPException(422,"Неверный результат проверки")
+    async with db.acquire() as c:
+        try:return dict(await c.fetchrow("""INSERT INTO equipment_audits(asset_id,checked_by,result,comment)
+            VALUES($1,$2,$3,$4) RETURNING *""",asset_id,person["id"],payload.result,payload.comment))
+        except asyncpg.ForeignKeyViolationError:raise HTTPException(404,"Оборудование не найдено")
+
+@app.get("/equipment/audits")
+async def equipment_audits(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("""SELECT a.*,e.inventory_number,e.name
+          FROM equipment_audits a JOIN equipment_assets e ON e.id=a.asset_id
+          ORDER BY a.checked_at DESC LIMIT 300""")]
