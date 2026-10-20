@@ -14,7 +14,7 @@ import asyncpg
 import jwt
 from jwt import InvalidTokenError
 from pwdlib import PasswordHash
-from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form, Response
 from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -173,6 +173,35 @@ async def storage_detail(contract_id: uuid.UUID, person=Depends(require_roles(*R
     result["photos"] = [dict(r) for r in photos]
     result["events"] = [dict(r) for r in events]
     return result
+
+
+@app.get("/storage/{contract_id}/photos/{photo_id}")
+async def view_storage_photo(
+    contract_id: uuid.UUID, photo_id: uuid.UUID,
+    person=Depends(require_roles(*ROLES)), db=Depends(database)
+):
+    """Serve private photo bytes only after checking employee authorization and ownership."""
+    async with db.acquire() as c:
+        key = await c.fetchval(
+            """SELECT object_key FROM storage_photos
+               WHERE id=$1 AND contract_id=$2 AND deleted_at IS NULL""",
+            photo_id, contract_id
+        )
+    if key is None:
+        raise HTTPException(404, "Photo not found")
+    if not key.startswith("supabase:"):
+        raise HTTPException(409, "Legacy photo storage is not accessible through this endpoint")
+    if not supabase_storage.configured():
+        raise HTTPException(503, "Private photo storage unavailable")
+    try:
+        data = await run_in_threadpool(supabase_storage.download_private_image, key)
+    except Exception:
+        raise HTTPException(502, "Photo could not be retrieved from private storage")
+    return Response(
+        content=data, media_type="image/jpeg",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"}
+    )
+
 
 
 class ReturnRequest(BaseModel):
