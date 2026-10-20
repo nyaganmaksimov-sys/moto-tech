@@ -792,3 +792,69 @@ async def list_inventory_movements(person=Depends(require_roles(*ROLES)),db=Depe
             m.repair_id,m.delta,m.reason,m.created_at
             FROM inventory_movements m JOIN inventory_parts p ON p.id=m.part_id
             ORDER BY m.created_at DESC LIMIT 200""")]
+
+class SupplierInput(BaseModel):
+    name: str = Field(min_length=2,max_length=250)
+    contact_person: str | None = Field(default=None,max_length=250)
+    phone: str | None = Field(default=None,max_length=80)
+    email: str | None = Field(default=None,max_length=254)
+    notes: str | None = Field(default=None,max_length=3000)
+
+class PartRequestInput(BaseModel):
+    part_name: str = Field(min_length=2,max_length=250)
+    sku: str | None = Field(default=None,max_length=100)
+    quantity: Decimal = Field(gt=0,le=10000000)
+    supplier_id: uuid.UUID | None = None
+    repair_id: uuid.UUID | None = None
+    notes: str | None = Field(default=None,max_length=3000)
+
+class PartRequestStatus(BaseModel):
+    status: str
+
+@app.get("/suppliers")
+async def suppliers_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("SELECT * FROM inventory_suppliers ORDER BY name LIMIT 500")]
+
+@app.post("/suppliers",status_code=201)
+async def suppliers_create(payload:SupplierInput,
+    person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        return dict(await c.fetchrow("""INSERT INTO inventory_suppliers(name,contact_person,phone,email,notes)
+          VALUES($1,$2,$3,$4,$5) RETURNING *""",payload.name.strip(),payload.contact_person,
+          payload.phone,payload.email,payload.notes))
+
+@app.get("/parts-requests")
+async def parts_requests_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("""SELECT r.*,s.name AS supplier_name
+          FROM inventory_requests r LEFT JOIN inventory_suppliers s ON s.id=r.supplier_id
+          ORDER BY r.created_at DESC LIMIT 300""")]
+
+@app.post("/parts-requests",status_code=201)
+async def parts_requests_create(payload:PartRequestInput,
+    person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        try:
+            return dict(await c.fetchrow("""INSERT INTO inventory_requests
+              (part_name,sku,quantity,supplier_id,repair_id,notes,created_by)
+              VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *""",payload.part_name.strip(),
+              payload.sku,payload.quantity,payload.supplier_id,payload.repair_id,
+              payload.notes,person["id"]))
+        except asyncpg.ForeignKeyViolationError:
+            raise HTTPException(422,"Поставщик или заказ-наряд не найден")
+
+@app.patch("/parts-requests/{request_id}/status")
+async def parts_requests_status(request_id:uuid.UUID,payload:PartRequestStatus,
+    person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    transitions={"requested":{"ordered","cancelled"},"ordered":{"received","cancelled"},
+                 "received":set(),"cancelled":set()}
+    async with db.acquire() as c:
+        async with c.transaction():
+            row=await c.fetchrow("SELECT status FROM inventory_requests WHERE id=$1 FOR UPDATE",request_id)
+            if not row:raise HTTPException(404,"Заявка не найдена")
+            if payload.status not in transitions[row["status"]]:
+                raise HTTPException(409,"Недопустимый переход статуса")
+            updated=await c.fetchrow("""UPDATE inventory_requests
+              SET status=$2,updated_at=now() WHERE id=$1 RETURNING *""",request_id,payload.status)
+    return dict(updated)
