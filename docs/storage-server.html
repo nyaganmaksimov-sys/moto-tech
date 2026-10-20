@@ -157,7 +157,7 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-let base='https://moto-tech-service-api.onrender.com',token='',current=null,staffRole='';
+let base='https://moto-tech-service-api.onrender.com',token='',current=null,staffRole='',staffId=null;
 const statusRu={draft:'Черновик',stored:'На хранении',return_requested:'Запрошена выдача',returned:'Выдан',cancelled:'Отменён'};
 const kindRu={front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',vin:'VIN',dashboard:'Приборная панель',damage:'Повреждение',pts:'ПТС',other:'Другое'};
 function status(message){$('status').textContent=message}
@@ -198,7 +198,32 @@ async function refreshEmployees(){
  const ownerOption=$('newEmployeeRole').querySelector('option[value="owner_manager"]');if(ownerOption)ownerOption.remove();
  if(staffRole==='owner_manager'){$('newEmployeeRole').add(new Option('Руководитель (полный доступ)','owner_manager'))}
  const employees=await request('/employees');const holder=$('employeeList');holder.replaceChildren();
- for(const person of employees){const row=document.createElement('p');row.textContent=person.full_name+' · '+(person.position||'Сотрудник')+' · '+person.username+' · '+({owner_manager:'Руководитель',manager:'Управляющий',administrator:'Администратор',mechanic:'Механик'}[person.role]||person.role)+(person.active?'':' · неактивен');holder.append(row)}
+
+ for(const person of employees){
+  const entry=document.createElement('details');entry.style.cssText='border-bottom:1px solid #3b4552;padding:12px 4px';
+  const heading=document.createElement('summary');heading.textContent=person.full_name+' · '+(person.position||'Сотрудник')+' · '+person.username+(person.active?'':' · Заблокирован');
+  entry.append(heading);
+  if(['owner_manager','administrator'].includes(staffRole) && (person.role!=='owner_manager'||person.id===staffId)){
+   const form=document.createElement('form');form.style.padding='12px 0';
+   const fields=[['full_name','ФИО',person.full_name],['position','Должность',person.position||'Сотрудник']];
+   for(const [key,title,value] of fields){const label=document.createElement('label');label.textContent=title;const input=document.createElement('input');input.name=key;input.value=value;input.required=true;label.append(input);form.append(label)}
+   const roleLabel=document.createElement('label');roleLabel.textContent='Роль доступа';const role=document.createElement('select');role.name='role';
+   const roles=[['mechanic','Механик'],['manager','Управляющий'],['administrator','Администратор']];
+   if(staffRole==='owner_manager')roles.push(['owner_manager','Руководитель']);
+   for(const [id,label] of roles){const opt=new Option(label,id);opt.selected=id===person.role;role.add(opt)}
+   roleLabel.append(role);form.append(roleLabel);
+   const activeLabel=document.createElement('label');const active=document.createElement('input');active.type='checkbox';active.checked=person.active;active.disabled=person.id===staffId;activeLabel.append(active,document.createTextNode(' Аккаунт активен'));form.append(activeLabel);
+   const save=document.createElement('button');save.type='submit';save.textContent='Сохранить данные';form.append(save);
+   form.onsubmit=async e=>{e.preventDefault();save.disabled=true;try{await request('/employees/'+person.id,{method:'PATCH',body:{full_name:form.elements.full_name.value,position:form.elements.position.value,role:role.value,active:active.checked}});await refreshEmployees();status('Данные сотрудника сохранены')}catch(err){status(err.message)}finally{save.disabled=false}};
+   entry.append(form);
+   if(person.id!==staffId && person.role!=='owner_manager'){
+    const pwdForm=document.createElement('form');const label=document.createElement('label');label.textContent='Новый пароль (от 14 символов)';const pwd=document.createElement('input');pwd.type='password';pwd.minLength=14;pwd.required=true;pwd.autocomplete='new-password';label.append(pwd);pwdForm.append(label);const reset=document.createElement('button');reset.textContent='Сменить пароль';pwdForm.append(reset);
+    pwdForm.onsubmit=async e=>{e.preventDefault();if(!confirm('Сбросить пароль этого сотрудника?'))return;reset.disabled=true;try{await request('/employees/'+person.id+'/reset-password',{method:'POST',body:{new_password:pwd.value}});pwd.value='';status('Пароль изменён')}catch(err){status(err.message)}finally{reset.disabled=false}};
+    entry.append(pwdForm);
+   }
+  }
+  holder.append(entry)
+ }
  if(!employees.length)holder.textContent='Сотрудников нет';
 }
 $('employeeCreate').onsubmit=async event=>{
@@ -241,7 +266,7 @@ $('loginForm').onsubmit=async event=>{
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw Error(response.status===401?'Неверный логин или пароль':typeof data.detail==='string'?data.detail:'Не удалось войти');
   token=data.access_token;$('password').value='';
-  const me=await request('/auth/me');staffRole=me.role;
+  const me=await request('/auth/me');staffRole=me.role;staffId=me.id;
   $('profile').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':me.role);
   await refresh();setSignedIn(true);$('staffMini').textContent=me.full_name+' · Руководитель';switchSystem('full');$('headerSub').textContent='Рабочая система';
   status('Вы вошли в систему.');
