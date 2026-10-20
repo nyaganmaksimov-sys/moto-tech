@@ -519,3 +519,11 @@ async def update_repair_status(repair_id:uuid.UUID,payload:RepairOrderState,
                      json.dumps({"from":old["status"],"to":payload.status}))
     return dict(row)
 
+
+@app.get("/employees")
+async def list_employees(person=Depends(require_roles(*ROLES)), db=Depends(database)):
+    """List employees without password hashes or credential material."""
+    async with db.acquire() as c:
+        rows = await c.fetch("""SELECT id,username,full_name,role,active,created_at
+                                FROM service_employees ORDER BY full_name""")
+    return [dict(row) for row in rows]
