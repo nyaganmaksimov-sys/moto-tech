@@ -302,7 +302,20 @@ async function refreshEquipment(){
   if(['owner_manager','manager','administrator'].includes(staffRole)){const edit=document.createElement('button');edit.type='button';edit.textContent='Изменить цену';edit.onclick=async()=>{const input=prompt('Закупочная стоимость, ₽. Пустое поле — неизвестна',x.purchase_cost_rub===null?'':String(x.purchase_cost_rub));if(input===null)return;const cost=input.trim()===''?null:Number(input.replace(',','.'));if(cost!==null&&(!Number.isFinite(cost)||cost<0)){status('Введите корректную стоимость');return}try{await request('/equipment/'+x.id+'/purchase-cost',{method:'PATCH',body:{purchase_cost_rub:cost}});await refreshEquipment();status('Стоимость оборудования обновлена')}catch(err){status(err.message)}};line.append(edit);const estimateBtn=document.createElement('button');estimateBtn.textContent='Изменить текущую оценку';estimateBtn.onclick=async()=>{const answer=prompt('Текущая оценочная стоимость, ₽',x.estimated_value_rub===null?'':String(x.estimated_value_rub));if(answer===null)return;const cost=answer.trim()?Number(answer.replace(',','.')):null;if(cost!==null&&(!Number.isFinite(cost)||cost<0)){status('Некорректная сумма');return}try{await request('/equipment/'+x.id+'/estimate',{method:'PATCH',body:{estimated_value_rub:cost}});await refreshEquipment();status('Оценка обновлена')}catch(err){status(err.message)}};line.append(estimateBtn)}
   const select=document.createElement('select');select.add(new Option('Результат проверки',''));for(const [k,v] of [['present','В наличии'],['missing','Не найдено'],['damaged','Повреждено']])select.add(new Option(v,k));
   const button=document.createElement('button');button.textContent='Записать проверку';button.onclick=async()=>{if(!select.value)return;try{await request('/equipment/'+x.id+'/audit',{method:'POST',body:{result:select.value}});await refreshEquipment();status('Проверка оборудования сохранена')}catch(err){status(err.message)}};
-  line.append(select,button);list.append(line);
+  line.append(select,button);
+  const history=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Карточка и история обслуживания';history.append(summary);
+  const events=document.createElement('div');history.append(events);
+  history.ontoggle=async()=>{if(!history.open)return;try{const rows=await request('/equipment/'+x.id+'/maintenance');events.replaceChildren();for(const e of rows){const p=document.createElement('p');p.textContent=e.performed_at+' · '+({inspection:'Осмотр',maintenance:'ТО',repair:'Ремонт'}[e.event_type]||e.event_type)+' · '+e.description+(e.cost_rub===null?'':' · '+e.cost_rub+' ₽');events.append(p)}if(!rows.length)events.textContent='История пуста'}catch(err){events.textContent=err.message}};
+  if(['owner_manager','manager','administrator'].includes(staffRole)){const action=document.createElement('button');action.textContent='Записать ТО / ремонт';action.onclick=async()=>{
+   const kind=prompt('Тип события: inspection, maintenance, repair','maintenance');if(!kind)return;
+   const description=prompt('Что выполнено?');if(!description)return;
+   const amount=prompt('Расходы на обслуживание, ₽ (необязательно)','');if(amount===null)return;
+   const due=prompt('Следующее обслуживание (ГГГГ-ММ-ДД, необязательно)','');if(due===null)return;
+   const cost=amount.trim()===''?null:Number(amount.replace(',','.'));
+   if(cost!==null&&(!Number.isFinite(cost)||cost<0)){status('Некорректная сумма');return}
+   try{await request('/equipment/'+x.id+'/maintenance',{method:'POST',body:{event_type:kind,description,cost_rub:cost,next_due_at:due?due+'T12:00:00Z':null}});history.open=false;history.open=true;status('Обслуживание записано')}catch(err){status(err.message)}
+  };history.append(action)}
+  line.append(history);list.append(line);
  }
  for(const x of audits.slice(0,30)){const p=document.createElement('p');p.textContent=new Date(x.checked_at).toLocaleString('ru-RU')+' · '+x.inventory_number+' · '+({present:'В наличии',missing:'Не найдено',damaged:'Повреждено'}[x.result]||x.result);log.append(p)}
  if(!assets.length)list.textContent='Оборудование ещё не добавлено';if(!audits.length)log.textContent='Инвентаризаций пока нет';
