@@ -104,6 +104,13 @@ async def run():
                 if not await connection.fetchval("SELECT to_regclass($1)","public."+table):
                     raise RuntimeError("Missing bookings/warranty table: "+table)
             print("Appointments and warranties schema checks passed")
+            if not await connection.fetchval("SELECT to_regclass('public.service_price_items')"):
+                await connection.execute((base / "010_finance_pricing.sql").read_text(encoding="utf-8"))
+                print("Applied: 010_finance_pricing.sql")
+            for table in ("service_price_items", "service_finance_entries"):
+                if not await connection.fetchval("SELECT to_regclass($1)", "public."+table):
+                    raise RuntimeError("Missing finance table: "+table)
+            print("Finance and pricing schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
