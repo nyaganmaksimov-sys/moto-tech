@@ -3,13 +3,47 @@
 <title>MOTO TECH — серверное хранение (тест)</title>
 <style>
 :root{font:15px system-ui,Arial;background:#0e1117;color:#ebedf5}*{box-sizing:border-box}body{margin:0}header{padding:18px 24px;background:#171b23;border-bottom:1px solid #343a46;display:flex;justify-content:space-between;align-items:center}h1{font-size:22px;margin:0}.brand{color:#f04b50}main{max-width:1100px;margin:auto;padding:20px}.card{border:1px solid #333c49;background:#1b2029;padding:20px;border-radius:12px;margin-bottom:18px}label{display:block;color:#aab5c4;margin:10px 0 5px;font-size:13px}input,textarea,select{width:100%;padding:11px;background:#10141b;color:#fff;border:1px solid #404a58;border-radius:8px;font:inherit}textarea{min-height:80px}button{background:#313946;color:#fff;border:1px solid #475160;padding:10px 14px;border-radius:8px;cursor:pointer}button.primary{background:#d53e46;border-color:#d53e46}.row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.row>*{flex:1;min-width:180px}.muted{color:#a5afbd}.notice{color:#f3c978}.hidden{display:none}.items button{width:100%;text-align:left;margin:5px 0}#status{white-space:pre-wrap;padding:12px 0}.gallery{display:flex;flex-wrap:wrap;gap:8px}.gallery figure{margin:0;width:155px;border:1px solid #465264;border-radius:8px;overflow:hidden;background:#121720}.gallery img{width:100%;height:120px;object-fit:cover;display:block;cursor:zoom-in}.gallery figcaption{padding:6px;font-size:12px;overflow-wrap:anywhere}small{color:#a6b1c0}a{color:#f6a2a5}
- .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}.info-grid div{border:1px solid #374251;border-radius:9px;padding:11px;overflow-wrap:anywhere}.info-grid small{display:block;margin-bottom:5px}.doc-actions{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0} .doc-actions button{flex:0 1 auto}</style></head><body>
-<header><h1><span class="brand">MOTO TECH</span> / Серверное хранение</h1><a href="./index.html">← Основная система</a></header>
+ .info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}.info-grid div{border:1px solid #374251;border-radius:9px;padding:11px;overflow-wrap:anywhere}.info-grid small{display:block;margin-bottom:5px}.doc-actions{display:flex;gap:9px;flex-wrap:wrap;margin:15px 0} .doc-actions button{flex:0 1 auto}
+body:has(#signIn:not(.hidden)){background:radial-gradient(ellipse at 50% -12%,#273142 0%,#11151d 48%,#0c0f15 100%);min-height:100vh}
+#appHeader{height:76px;padding:18px clamp(22px,4vw,64px);background:rgba(18,22,30,.83);border-bottom:1px solid #2b323f}
+#appHeader h1{font-weight:800;letter-spacing:.035em;font-size:19px}
+.header-divider{color:#67717f;margin:0 13px;font-weight:400}
+#headerSub{font-size:14px;color:#b7c0ce;font-weight:500;letter-spacing:0}
+#pilotTag{color:#8e99a9;border:1px solid #3b4552;border-radius:6px;padding:7px 9px;font-size:10px;letter-spacing:.13em;font-weight:700}
+.login-card{width:min(100%,450px);margin:clamp(48px,10vh,120px) auto 0;padding:42px 42px 28px;background:#1a202a;border:1px solid #364151;box-shadow:0 26px 80px #0005;border-radius:18px}
+.login-mark{width:68px;height:68px;border:1px solid #5a4148;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#fff;background:#27252b;font-size:24px;font-weight:900;letter-spacing:-.075em;margin-bottom:25px;position:relative}
+.mark-slash{position:absolute;left:11px;top:11px;bottom:11px;width:4px;background:#e33c46;transform:skew(-18deg);border-radius:3px}
+.login-eyebrow{font-size:11px;letter-spacing:.16em;font-weight:800;color:#e65b63;margin-bottom:9px}
+.login-card h2{font-size:29px;letter-spacing:-.035em;margin:0 0 10px}
+.login-subtitle{margin:0 0 30px;color:#a7b0be;font-size:14px;line-height:1.6}
+.login-card label{font-size:13px;color:#c8cfdb;font-weight:600;margin:18px 0 8px}
+.login-card input{height:49px;padding:0 15px;background:#11161e;border:1px solid #3c4859;border-radius:9px;outline:none}
+.login-card input:focus{border-color:#e44b55;box-shadow:0 0 0 3px #dd3e461c}
+.password-wrap{position:relative}.password-wrap input{padding-right:105px}
+#showPassword{position:absolute;right:5px;top:5px;border:0;background:transparent;color:#b3bfce;font-size:12px;height:39px}
+.login-submit{display:flex;align-items:center;justify-content:space-between;width:100%;margin-top:27px;height:50px;font-weight:750;font-size:14px;padding:0 18px}
+.login-submit:disabled{opacity:.65;cursor:wait}
+.login-footer{display:flex;justify-content:center;align-items:center;gap:8px;border-top:1px solid #303a48;margin-top:28px;padding-top:23px;font-size:11px;color:#8390a1}
+.status-dot{width:7px;height:7px;background:#52bc91;border-radius:50%;box-shadow:0 0 0 3px #52bc9118}.login-footer-sep{color:#556274}
+body:has(#signIn:not(.hidden)) main{max-width:1100px}
+body:has(#signIn:not(.hidden)) #status{max-width:450px;margin:12px auto;color:#f5a6a9;text-align:center}
+@media(max-width:540px){.login-card{margin:30px auto;padding:29px 22px}.login-card h2{font-size:25px}#pilotTag{display:none}#appHeader{height:68px}}
+</style></head><body>
+<header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1><span id="pilotTag">TEST ENVIRONMENT</span></header>
 <main>
-<p class="notice">Тестовый интерфейс. Используйте только защищённый HTTPS-сервер MOTO TECH. Сведения о клиентах не вводите до проверки развёртывания и защиты данных. Демо из основной системы сюда автоматически не переносится.</p>
-<section class="card" id="signIn">
-<h2>Вход сотрудника</h2><div class="row"><div><label>Адрес API (HTTPS)</label><input id="api" placeholder="https://api.example.ru" autocomplete="url"></div><div><label>Логин</label><input id="username" autocomplete="username"></div><div><label>Пароль</label><input id="password" type="password" autocomplete="current-password"></div></div>
-<p><button class="primary" id="login">Войти</button></p>
+<section class="card login-card" id="signIn">
+ <div class="login-mark"><span class="mark-slash"></span><span>MT</span></div>
+ <div class="login-eyebrow">MOTO TECH · WORKSPACE</div>
+ <h2>Добро пожаловать</h2>
+ <p class="login-subtitle">Войдите в рабочую систему под своей учётной записью.</p>
+ <form id="loginForm">
+  <label for="username">Логин сотрудника</label>
+  <input id="username" name="username" autocomplete="username" placeholder="Введите логин" required autofocus spellcheck="false">
+  <label for="password">Пароль</label>
+  <div class="password-wrap"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Введите пароль" required><button id="showPassword" type="button" aria-label="Показать пароль">Показать</button></div>
+  <button class="primary login-submit" id="login" type="submit">Войти в систему <span aria-hidden="true">→</span></button>
+ </form>
+ <div class="login-footer"><span class="status-dot"></span> Защищённое соединение <span class="login-footer-sep">·</span> Тестовая версия</div>
 </section>
 <section class="card hidden" id="workspace">
 <div class="row"><h2 id="profile">Хранение</h2><button id="logout">Выйти</button><button id="refresh">Обновить список</button></div>
@@ -40,7 +74,7 @@
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-let base='',token='',current=null;
+let base='https://moto-tech-service-api.onrender.com',token='',current=null;
 const statusRu={draft:'Черновик',stored:'На хранении',return_requested:'Запрошена выдача',returned:'Выдан',cancelled:'Отменён'};
 const kindRu={front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',vin:'VIN',dashboard:'Приборная панель',damage:'Повреждение',pts:'ПТС',other:'Другое'};
 function status(message){$('status').textContent=message}
@@ -54,18 +88,28 @@ async function request(path,{method='GET',body,form}={}){
  if(!response.ok){if(response.status===401){token='';setSignedIn(false)}throw new Error(typeof result.detail==='string'?result.detail:'Ошибка API: '+response.status)}
  return result;
 }
-$('login').onclick=async()=>{
- try{
-  const url=new URL($('api').value.trim());if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)throw Error('Укажите HTTPS-адрес API без дополнительных параметров');
-  base=url.origin+url.pathname.replace(/\/$/,'');const username=$('username').value.trim();const password=$('password').value;
-  const response=await fetch(base+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password}),cache:'no-store'});
-  const data=await response.json();if(!response.ok)throw Error(data.detail||'Неверные учётные данные');
-  token=data.access_token;$('password').value='';setSignedIn(true);
-  const me=await request('/auth/me');$('profile').textContent=me.full_name+' · '+me.role;
-  await refresh();status('Вход выполнен. Данные загружаются с сервера.');
- }catch(e){token='';setSignedIn(false);status(e.message)}
+$('showPassword').onclick=()=>{
+ const field=$('password'),visible=field.type==='password';
+ field.type=visible?'text':'password';
+ $('showPassword').textContent=visible?'Скрыть':'Показать';
 };
-$('logout').onclick=()=>{token='';setSignedIn(false);status('Сеанс завершён')};
+$('loginForm').onsubmit=async event=>{
+ event.preventDefault();
+ const submit=$('login');submit.disabled=true;submit.textContent='Выполняется вход…';status('');
+ try{
+  const username=$('username').value.trim(),password=$('password').value;
+  const response=await fetch(base+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password}),cache:'no-store'});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(response.status===401?'Неверный логин или пароль':typeof data.detail==='string'?data.detail:'Не удалось войти');
+  token=data.access_token;$('password').value='';
+  const me=await request('/auth/me');
+  $('profile').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':me.role);
+  await refresh();setSignedIn(true);$('headerSub').textContent='Управление хранением';
+  status('Вы вошли в систему.');
+ }catch(e){token='';setSignedIn(false);status(e.message)}
+ finally{submit.disabled=false;submit.textContent='Войти в систему →'}
+};
+$('logout').onclick=()=>{token='';setSignedIn(false);$('headerSub').textContent='Сервисная платформа';status('Сеанс завершён')};
 async function refresh(){
  const rows=await request('/storage');$('records').replaceChildren();
  if(!rows.length)$('records').textContent='Карточек пока нет';
