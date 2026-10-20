@@ -56,6 +56,15 @@ async def run():
                 if missing:
                     raise RuntimeError(f"Table {table} missing columns: {sorted(missing)}")
             print("Storage migration schema checks passed")
+            repairs_exists = await connection.fetchval("SELECT to_regclass('public.repair_orders')")
+            if not repairs_exists:
+                await connection.execute((base / "003_repair_orders.sql").read_text(encoding="utf-8"))
+                print("Applied: 003_repair_orders.sql")
+            for table in ("repair_orders", "repair_order_events"):
+                exists = await connection.fetchval("SELECT to_regclass($1)", "public." + table)
+                if not exists:
+                    raise RuntimeError("Missing required table: " + table)
+            print("Repair order schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
