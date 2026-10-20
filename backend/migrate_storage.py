@@ -26,13 +26,14 @@ async def run():
         await connection.execute("SELECT pg_advisory_lock(7251092026)")
         try:
             existing = await connection.fetch("SELECT to_regclass('public.storage_contracts') AS contracts, to_regclass('public.service_employees') AS employees")
+            if bool(existing[0]["contracts"]) != bool(existing[0]["employees"]):
+                raise RuntimeError("Partial schema detected; inspect database manually before migrating")
             if existing[0]["contracts"] and existing[0]["employees"]:
                 print("Storage tables already exist; verifying table structure instead of reapplying migrations.")
             else:
                 for name in FILES:
                     sql = (base / name).read_text(encoding="utf-8")
-                    async with connection.transaction():
-                        await connection.execute(sql)
+                    await connection.execute(sql)
                     print("Applied:", name)
             for table in ("storage_contracts", "storage_photos", "storage_events", "service_employees"):
                 exists = await connection.fetchval("SELECT to_regclass($1)", "public." + table)
