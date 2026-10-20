@@ -554,3 +554,50 @@ async def create_employee(payload:EmployeeCreate,
         except asyncpg.UniqueViolationError:
             raise HTTPException(409,"Такой логин уже используется")
     return dict(employee)
+
+class ClientCreate(BaseModel):
+    full_name: str = Field(min_length=2,max_length=250)
+    phone: str | None = Field(default=None,max_length=80)
+    email: str | None = Field(default=None,max_length=254)
+    notes: str | None = Field(default=None,max_length=3000)
+
+class VehicleCreate(BaseModel):
+    client_id: uuid.UUID
+    vehicle_type: str = Field(default="Мотоцикл",max_length=100)
+    brand: str = Field(min_length=1,max_length=150)
+    model: str = Field(min_length=1,max_length=150)
+    year: int | None = Field(default=None,ge=1900,le=2200)
+    vin: str | None = Field(default=None,max_length=64)
+    plate: str | None = Field(default=None,max_length=30)
+    notes: str | None = Field(default=None,max_length=3000)
+
+@app.get("/clients")
+async def list_clients(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("SELECT * FROM service_clients ORDER BY created_at DESC LIMIT 300")]
+
+@app.post("/clients",status_code=201)
+async def add_client(payload:ClientCreate,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return dict(await c.fetchrow("""INSERT INTO service_clients(full_name,phone,email,notes)
+          VALUES($1,$2,$3,$4) RETURNING *""",payload.full_name.strip(),payload.phone,payload.email,payload.notes))
+
+@app.get("/vehicles")
+async def list_vehicles(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("""SELECT v.*,c.full_name AS owner_name FROM service_vehicles v
+            JOIN service_clients c ON c.id=v.client_id ORDER BY v.created_at DESC LIMIT 300""")]
+
+@app.post("/vehicles",status_code=201)
+async def add_vehicle(payload:VehicleCreate,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        try:
+            return dict(await c.fetchrow("""INSERT INTO service_vehicles
+              (client_id,vehicle_type,brand,model,year,vin,plate,notes)
+              VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *""",
+              payload.client_id,payload.vehicle_type,payload.brand.strip(),payload.model.strip(),
+              payload.year,payload.vin.strip().upper() if payload.vin else None,payload.plate,payload.notes))
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(409,"Техника с таким VIN уже существует")
+        except asyncpg.ForeignKeyViolationError:
+            raise HTTPException(422,"Владелец не найден")
