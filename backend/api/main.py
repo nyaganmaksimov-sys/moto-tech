@@ -1257,3 +1257,24 @@ async def category_valuation(person=Depends(require_roles("owner_manager","manag
     async with db.acquire() as c:
         rows=await c.fetch("SELECT category,count(*) AS asset_count,count(estimated_value_rub) AS estimated_count,coalesce(sum(purchase_cost_rub),0) AS purchase_total_rub,coalesce(sum(estimated_value_rub),0) AS estimated_total_rub FROM equipment_assets GROUP BY category ORDER BY category")
     return [dict(row) for row in rows]
+
+class EquipmentMaintenanceInput(BaseModel):
+    event_type: str
+    description: str = Field(min_length=3,max_length=3000)
+    cost_rub: Decimal | None = Field(default=None,ge=0)
+    next_due_at: datetime | None = None
+
+@app.get("/equipment/{asset_id}/maintenance")
+async def equipment_maintenance_list(asset_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("SELECT * FROM equipment_maintenance WHERE asset_id=$1 ORDER BY performed_at DESC,created_at DESC LIMIT 200",asset_id)]
+
+@app.post("/equipment/{asset_id}/maintenance",status_code=201)
+async def equipment_maintenance_add(asset_id:uuid.UUID,payload:EquipmentMaintenanceInput,
+    person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    if payload.event_type not in ("inspection","maintenance","repair"):
+        raise HTTPException(422,"Недопустимый тип события")
+    async with db.acquire() as c:
+        if not await c.fetchval("SELECT EXISTS(SELECT 1 FROM equipment_assets WHERE id=$1)",asset_id):
+            raise HTTPException(404,"Оборудование не найдено")
+        return dict(await c.fetchrow("INSERT INTO equipment_maintenance(asset_id,event_type,description,cost_rub,next_due_at,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",asset_id,payload.event_type,payload.description.strip(),payload.cost_rub,payload.next_due_at.date() if payload.next_due_at else None,person["id"]))
