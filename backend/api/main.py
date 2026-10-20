@@ -643,3 +643,64 @@ async def reset_employee_password(employee_id:uuid.UUID,payload:EmployeePassword
         hashed=await run_in_threadpool(password_hash.hash,payload.new_password)
         await c.execute("UPDATE service_employees SET password_hash=$2 WHERE id=$1",employee_id,hashed)
     return {"ok":True}
+
+class PinDeviceEnroll(BaseModel):
+    pin: str = Field(pattern=r"^[0-9]{6}$")
+    label: str = Field(default="Браузер",max_length=80)
+
+class PinDeviceLogin(BaseModel):
+    device_token: str = Field(min_length=50,max_length=200)
+    pin: str = Field(pattern=r"^[0-9]{6}$")
+
+class PinDeviceRevoke(BaseModel):
+    device_token: str = Field(min_length=50,max_length=200)
+
+def _pin_device_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+@app.post("/auth/pin/enroll",status_code=201)
+async def enroll_pin_device(payload:PinDeviceEnroll,person=Depends(actor),db=Depends(database)):
+    device_token=secrets.token_urlsafe(48)
+    hashed_pin=await run_in_threadpool(password_hash.hash,payload.pin)
+    async with db.acquire() as c:
+        await c.execute("""INSERT INTO staff_pin_devices(employee_id,device_hash,pin_hash,label)
+                           VALUES($1,$2,$3,$4)""",person["id"],_pin_device_digest(device_token),
+                           hashed_pin,payload.label)
+    return {"device_token":device_token,"expires_in_days":90}
+
+@app.post("/auth/pin/login")
+async def login_with_pin(payload:PinDeviceLogin,db=Depends(database)):
+    # Fixed-width device token, random enough to resist guessing; PIN alone is not sufficient.
+    device_hash=_pin_device_digest(payload.device_token)
+    async with db.acquire() as c:
+        async with c.transaction():
+            row=await c.fetchrow("""SELECT d.id,d.pin_hash,d.failures,d.locked_until,e.id AS employee_id,
+               e.username,e.full_name,e.role
+               FROM staff_pin_devices d JOIN service_employees e ON e.id=d.employee_id
+               WHERE d.device_hash=$1 AND d.revoked_at IS NULL AND d.expires_at>now()
+               AND e.active=true FOR UPDATE OF d""",device_hash)
+            if not row:
+                raise HTTPException(401,"Войдите с логином и паролем на этом устройстве")
+            if row["locked_until"] and row["locked_until"]>datetime.now(timezone.utc):
+                raise HTTPException(429,"PIN временно заблокирован после неверных попыток")
+            valid=await run_in_threadpool(password_hash.verify,payload.pin,row["pin_hash"])
+            if not valid:
+                await c.execute("""UPDATE staff_pin_devices SET failures=failures+1,
+                    locked_until=CASE WHEN failures+1>=5 THEN now()+interval '15 minutes'
+                    ELSE NULL END WHERE id=$1""",row["id"])
+                raise HTTPException(401,"Неверный PIN-код")
+            await c.execute("""UPDATE staff_pin_devices SET failures=0,locked_until=NULL,
+                              last_used_at=now() WHERE id=$1""",row["id"])
+    now=datetime.now(timezone.utc)
+    token=jwt.encode({"sub":str(row["employee_id"]),"iat":now,
+                      "exp":now+timedelta(hours=8)},JWT_SECRET,algorithm=ALGORITHM)
+    return {"access_token":token,"token_type":"bearer","expires_in":28800,
+            "profile":{"username":row["username"],"full_name":row["full_name"],"role":row["role"]}}
+
+@app.post("/auth/pin/revoke")
+async def revoke_pin_device(payload:PinDeviceRevoke,person=Depends(actor),db=Depends(database)):
+    async with db.acquire() as c:
+        await c.execute("""UPDATE staff_pin_devices SET revoked_at=now()
+                  WHERE employee_id=$1 AND device_hash=$2 AND revoked_at IS NULL""",
+                  person["id"],_pin_device_digest(payload.device_token))
+    return {"ok":True}
