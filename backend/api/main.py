@@ -995,3 +995,26 @@ async def update_1c_settings(payload:OneCSettingsInput,
          mode='disabled',updated_by=EXCLUDED.updated_by,updated_at=now()
          RETURNING configuration,mode,updated_at""",payload.configuration.strip(),person["id"])
     return dict(row)
+
+@app.get("/integrations/1c/capabilities")
+async def one_c_capabilities(person=Depends(require_roles("owner_manager","administrator"))):
+    return {"connected":False,"exchange_enabled":False,"preview_only":True,
+       "entities":["clients","vehicles","suppliers","parts","prices"],
+       "adapter_status":"awaiting_1c_configuration"}
+
+@app.get("/integrations/1c/preview/{entity_type}")
+async def one_c_preview(entity_type:str,limit:int=20,
+    person=Depends(require_roles("owner_manager","administrator")),db=Depends(database)):
+    if limit<1 or limit>100:raise HTTPException(422,"Укажите от 1 до 100 записей")
+    queries={
+      "clients":"SELECT id,full_name,phone,email FROM service_clients ORDER BY id LIMIT $1",
+      "vehicles":"SELECT id,client_id,brand,model,year,vin,plate FROM service_vehicles ORDER BY id LIMIT $1",
+      "suppliers":"SELECT id,name,phone,email FROM inventory_suppliers ORDER BY id LIMIT $1",
+      "parts":"SELECT id,sku,name,unit,quantity,sale_price FROM inventory_parts ORDER BY id LIMIT $1",
+      "prices":"SELECT id,category,name,price_rub FROM service_price_items ORDER BY id LIMIT $1"
+    }
+    if entity_type not in queries:raise HTTPException(404,"Тип данных не поддерживается")
+    async with db.acquire() as c:rows=await c.fetch(queries[entity_type],limit)
+    return {"schema_version":"mototech.1c.preview.v1","entity_type":entity_type,
+            "transferred":False,"rows":[{k:str(v) if isinstance(v,(Decimal,uuid.UUID)) else v
+              for k,v in dict(row).items()} for row in rows]}
