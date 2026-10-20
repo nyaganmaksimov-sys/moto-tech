@@ -1099,3 +1099,40 @@ async def assign_repair_mechanic(repair_id:uuid.UUID,payload:RepairAssignment,
             await c.execute("""INSERT INTO repair_order_events(order_id,actor_id,event_type)
                   VALUES($1,$2,'mechanic_assigned')""",repair_id,person["id"])
     return dict(updated)
+
+class RepairWorkInput(BaseModel):
+    description: str = Field(min_length=2,max_length=1500)
+    quantity: Decimal = Field(gt=0,le=100000)
+    unit_price_rub: Decimal = Field(ge=0,le=10000000)
+
+@app.get("/repairs/mine")
+async def my_repairs(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        return [dict(r) for r in await c.fetch("""SELECT * FROM repair_orders
+          WHERE mechanic_id=$1 ORDER BY updated_at DESC LIMIT 200""",person["id"])]
+
+@app.get("/repairs/{repair_id}/works")
+async def repair_work_list(repair_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        if not await c.fetchval("SELECT EXISTS(SELECT 1 FROM repair_orders WHERE id=$1)",repair_id):
+            raise HTTPException(404,"Заказ не найден")
+        return [dict(r) for r in await c.fetch("""SELECT id,repair_id,description,quantity,unit_price_rub,created_at
+              FROM repair_work_items WHERE repair_id=$1 ORDER BY created_at""",repair_id)]
+
+@app.post("/repairs/{repair_id}/works",status_code=201)
+async def repair_work_add(repair_id:uuid.UUID,payload:RepairWorkInput,
+    person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        async with c.transaction():
+            order=await c.fetchrow("SELECT mechanic_id,status FROM repair_orders WHERE id=$1 FOR UPDATE",repair_id)
+            if not order:raise HTTPException(404,"Заказ не найден")
+            if order["status"] in ("issued","cancelled"):raise HTTPException(409,"Заказ закрыт")
+            if person["role"] not in ("owner_manager","manager","administrator") and order["mechanic_id"]!=person["id"]:
+                raise HTTPException(403,"Можно добавлять работы только в назначенный заказ")
+            row=await c.fetchrow("""INSERT INTO repair_work_items(repair_id,description,quantity,unit_price_rub,created_by)
+                 VALUES($1,$2,$3,$4,$5) RETURNING *""",repair_id,payload.description.strip(),payload.quantity,
+                 payload.unit_price_rub,person["id"])
+            await c.execute("UPDATE repair_orders SET updated_at=now(),version=version+1 WHERE id=$1",repair_id)
+            await c.execute("""INSERT INTO repair_order_events(order_id,actor_id,event_type)
+                 VALUES($1,$2,'work_added')""",repair_id,person["id"])
+    return dict(row)
