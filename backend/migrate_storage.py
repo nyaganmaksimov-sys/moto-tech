@@ -118,6 +118,12 @@ async def run():
                 if not await connection.fetchval("SELECT to_regclass($1)","public."+table):
                     raise RuntimeError("Missing 1C integration table: "+table)
             print("1C integration schema checks passed")
+            if not await connection.fetchval("""SELECT EXISTS(
+                SELECT 1 FROM information_schema.columns WHERE table_name='repair_orders'
+                AND column_name='mechanic_id')"""):
+                await connection.execute((base / "012_repair_assignment.sql").read_text(encoding="utf-8"))
+                print("Applied: 012_repair_assignment.sql")
+            print("Repair assignment schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
