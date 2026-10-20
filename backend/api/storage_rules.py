@@ -16,7 +16,7 @@ ALLOWED_TRANSITIONS = {
 
 def normalize_vin(value: str) -> str:
     """Normalize for duplicate detection; do not incorrectly impose 17 chars on frame IDs."""
-    return re.sub(r"[\\s-]+", "", value or "").upper()
+    return re.sub(r"[\s-]+", "", value or "").upper()
 
 def photo_validation_errors(photos: list[dict]) -> list[str]:
     errors = []
