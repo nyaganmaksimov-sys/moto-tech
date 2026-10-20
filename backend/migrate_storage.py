@@ -124,6 +124,10 @@ async def run():
                 await connection.execute((base / "012_repair_assignment.sql").read_text(encoding="utf-8"))
                 print("Applied: 012_repair_assignment.sql")
             print("Repair assignment schema checks passed")
+            if not await connection.fetchval("SELECT to_regclass('public.repair_work_items')"):
+                await connection.execute((base / "013_repair_work_items.sql").read_text(encoding="utf-8"))
+                print("Applied: 013_repair_work_items.sql")
+            print("Repair work items schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
