@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 
@@ -84,7 +85,7 @@ class StorageDraft(BaseModel):
     brand_model: str = Field(min_length=1,max_length=200)
     plate: str | None = Field(default=None,max_length=30)
     location_label: str | None = Field(default=None,max_length=100)
-    monthly_rate_rub: float = Field(default=0,ge=0,le=100000000)
+    monthly_rate_rub: Decimal = Field(default=Decimal('0'),ge=0,le=100000000)
     body_condition: str | None = Field(default=None,max_length=10000)
     damage_description: str | None = Field(default=None,max_length=10000)
 
