@@ -78,14 +78,17 @@ $('create').onsubmit=async e=>{
 };
 const required=['front','rear','left','right','vin'];
 const photoBlobUrls=new Set();
-async function requestPhoto(contractId,photoId,img){
+let photoGalleryGeneration=0;
+async function requestPhoto(contractId,photoId,img,generation){
  const res=await fetch(base+'/storage/'+encodeURIComponent(contractId)+'/photos/'+encodeURIComponent(photoId),{headers:{Authorization:'Bearer '+token},cache:'no-store'});
  if(!res.ok)throw Error('Фото недоступно: '+res.status);
  const blob=await res.blob();
+ if(generation!==photoGalleryGeneration || !img.isConnected)return;
  const url=URL.createObjectURL(blob);photoBlobUrls.add(url);img.src=url;
  img.onclick=()=>window.open(url,'_blank','noopener,noreferrer');
 }
 function clearPhotoUrls(){
+ photoGalleryGeneration++;
  for(const url of photoBlobUrls)URL.revokeObjectURL(url);
  photoBlobUrls.clear();
 }
@@ -101,7 +104,7 @@ async function openRecord(id){
     img.alt='Фото '+photo.kind;
     caption.textContent=photo.kind+(photo.note?' · '+photo.note:'');
     figure.append(img,caption);$('photos').append(figure);
-    requestPhoto(detailId,photo.id,img).catch(()=>{caption.textContent+=' · не удалось получить фото'});
+    requestPhoto(detailId,photo.id,img,photoGalleryGeneration).catch(()=>{if(img.isConnected)caption.textContent+=' · не удалось получить фото'});
   }
   const kinds=new Set(current.photos.map(p=>p.kind));
   $('missing').textContent=required.filter(k=>!kinds.has(k)).length?'Не хватает фото: '+required.filter(k=>!kinds.has(k)).join(', '):'Обязательные фото загружены.';
