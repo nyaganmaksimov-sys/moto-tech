@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from backend.api.storage_rules import normalize_vin
+from backend.api.storage_rules import normalize_vin, validate_transition
 
 pool = None
 password_hash = PasswordHash.recommended()
@@ -167,6 +167,74 @@ async def storage_detail(contract_id: uuid.UUID, person=Depends(require_roles(*R
     result["events"] = [dict(r) for r in events]
     return result
 
-# Accept / return / photo write endpoints are intentionally disabled until private
-# object uploads are verified and an atomic inspection-complete transition is deployed.
-# No public account-registration endpoint: employee provisioning is an admin-only operation.
+
+class ReturnRequest(BaseModel):
+    version: int = Field(ge=1)
+    note: str = Field(default="", max_length=2000)
+
+class ReturnHandover(BaseModel):
+    version: int = Field(ge=1)
+    received_by: str = Field(min_length=2, max_length=250)
+    condition_at_return: str = Field(min_length=3, max_length=5000)
+    all_keys_returned: bool
+    documents_returned: bool
+
+@app.post("/storage/{contract_id}/request-return")
+async def request_storage_return(
+    contract_id: uuid.UUID, payload: ReturnRequest,
+    person=Depends(require_roles(*ROLES)), db=Depends(database)
+):
+    async with db.acquire() as c:
+        async with c.transaction():
+            row = await c.fetchrow("SELECT status,version FROM storage_contracts WHERE id=$1 FOR UPDATE", contract_id)
+            if not row:
+                raise HTTPException(404, "Contract not found")
+            if row["version"] != payload.version:
+                raise HTTPException(409, "Contract changed; reload before proceeding")
+            try:
+                validate_transition(row["status"], "return_requested", [])
+            except ValueError as exc:
+                raise HTTPException(409, str(exc))
+            updated = await c.fetchrow("""UPDATE storage_contracts
+                SET status='return_requested',updated_at=now(),updated_by=$2,version=version+1
+                WHERE id=$1 RETURNING id,status,version""", contract_id, person["id"])
+            await c.execute("""INSERT INTO storage_events(contract_id,event_type,actor_id,payload)
+                VALUES($1,'return_requested',$2,$3::jsonb)""",
+                contract_id, person["id"], json.dumps({"note": payload.note}))
+    return dict(updated)
+
+@app.post("/storage/{contract_id}/handover")
+async def complete_storage_handover(
+    contract_id: uuid.UUID, payload: ReturnHandover,
+    person=Depends(require_roles(*ROLES)), db=Depends(database)
+):
+    if not payload.all_keys_returned or not payload.documents_returned:
+        raise HTTPException(422, "Confirm return of keys and documents before handover")
+    async with db.acquire() as c:
+        async with c.transaction():
+            row = await c.fetchrow("SELECT status,version FROM storage_contracts WHERE id=$1 FOR UPDATE", contract_id)
+            if not row:
+                raise HTTPException(404, "Contract not found")
+            if row["version"] != payload.version:
+                raise HTTPException(409, "Contract changed; reload before proceeding")
+            try:
+                validate_transition(row["status"], "returned", [])
+            except ValueError as exc:
+                raise HTTPException(409, str(exc))
+            updated = await c.fetchrow("""UPDATE storage_contracts
+                SET status='returned',returned_at=now(),updated_at=now(),
+                    updated_by=$2,version=version+1,
+                    other_condition=$3
+                WHERE id=$1 RETURNING id,status,returned_at,version""",
+                contract_id, person["id"], payload.condition_at_return.strip())
+            await c.execute("""INSERT INTO storage_events(contract_id,event_type,actor_id,payload)
+                VALUES($1,'returned',$2,$3::jsonb)""",
+                contract_id, person["id"], json.dumps({
+                    "received_by": payload.received_by.strip(),
+                    "condition_at_return": payload.condition_at_return.strip(),
+                    "all_keys_returned": True, "documents_returned": True
+                }))
+    return dict(updated)
+
+# Acceptance and photo uploads remain disabled until private object storage is operational.
+# Employee provisioning remains an administrator-only offline operation.
