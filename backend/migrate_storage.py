@@ -83,6 +83,13 @@ async def run():
                 await connection.execute((base / "006_staff_pin_devices.sql").read_text(encoding="utf-8"))
                 print("Applied: 006_staff_pin_devices.sql")
             print("PIN devices schema checks passed")
+            if not await connection.fetchval("SELECT to_regclass('public.inventory_parts')"):
+                await connection.execute((base / "007_inventory.sql").read_text(encoding="utf-8"))
+                print("Applied: 007_inventory.sql")
+            for table in ("inventory_parts","inventory_movements"):
+                if not await connection.fetchval("SELECT to_regclass($1)", "public."+table):
+                    raise RuntimeError("Missing inventory table: "+table)
+            print("Inventory schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
