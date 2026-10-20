@@ -1240,3 +1240,20 @@ async def equipment_valuation(person=Depends(require_roles("owner_manager","mana
           coalesce(sum(purchase_cost_rub) FILTER (WHERE condition <> 'retired'),0) AS active_purchase_rub
           FROM equipment_assets""")
     return dict(row)
+
+class EquipmentEstimateUpdate(BaseModel):
+    estimated_value_rub: Decimal | None = Field(default=None,ge=0)
+
+@app.patch("/equipment/{asset_id}/estimate")
+async def equipment_estimate(asset_id:uuid.UUID,payload:EquipmentEstimateUpdate,
+ person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        row=await c.fetchrow("UPDATE equipment_assets SET estimated_value_rub=$2, valuation_date=CURRENT_DATE WHERE id=$1 RETURNING id,estimated_value_rub,valuation_date",asset_id,payload.estimated_value_rub)
+    if not row:raise HTTPException(404,"Оборудование не найдено")
+    return dict(row)
+
+@app.get("/equipment/valuation/categories")
+async def category_valuation(person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        rows=await c.fetch("SELECT category,count(*) AS asset_count,count(estimated_value_rub) AS estimated_count,coalesce(sum(purchase_cost_rub),0) AS purchase_total_rub,coalesce(sum(estimated_value_rub),0) AS estimated_total_rub FROM equipment_assets GROUP BY category ORDER BY category")
+    return [dict(row) for row in rows]
