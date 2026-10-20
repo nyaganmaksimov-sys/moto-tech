@@ -17,7 +17,7 @@ def _base():
 
 def _headers(mimetype=None):
     key = os.environ["MOTOTECH_SUPABASE_SECRET_KEY"]
-    h = {"apikey": key, "Authorization": "Bearer " + key}
+    h = {"apikey": key}\n    # Legacy JWT service_role keys also accept Authorization: Bearer. Modern sb_secret keys are API keys, not JWTs.\n    if not key.startswith("sb_secret_"):\n        h["Authorization"] = "Bearer " + key
     if mimetype:
         h["Content-Type"] = mimetype
     return h
