@@ -13,3 +13,10 @@ Not yet implemented: object upload, completed intake, return and delivery workfl
 Tests: python -m unittest discover -s backend/tests -v
 
 Before production use: configure authentication throttling, private object storage, signed photo access, atomic intake completion, migration tests, backups and role-based frontend integration.
+
+## Photo intake (development only)
+Set MOTOTECH_PRIVATE_PHOTO_ROOT to an existing, private directory owned by the API service user (not within any public/static web root). Limit filesystem and backup access to authorized operators. The API converts validated JPEG/PNG/WEBP images to private JPEGs, removes embedded EXIF metadata and stores their SHA-256 hashes in PostgreSQL.
+- POST /storage/{id}/photos (multipart kind, note, photo; bearer token)
+- POST /storage/{id}/accept (JSON version and condition_confirmed=true; bearer token)
+
+Acceptance requires front, rear, left, right and VIN images, a written condition, and existing private files. Images remain unavailable through public URLs. Set up HTTPS, private backups, upload quotas, auth throttling, and media scan/isolation before using customer data.
