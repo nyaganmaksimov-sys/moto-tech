@@ -32,7 +32,14 @@ body:has(#signIn:not(.hidden)) #status{max-width:450px;margin:12px auto;color:#f
 </style></head><body>
 <header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1><span id="pilotTag">MOTO TECH</span></header>
 <nav id="systemTabs" class="system-tabs hidden"><button id="openSystem" type="button" class="active">Главная</button><button id="openRepairs" type="button">Заказ-наряды и ремонт</button><button id="openStorage" type="button">Хранение мотоциклов</button><button id="openEmployees" type="button">Сотрудники</button><span id="staffMini" class="profile-mini"></span><button id="navLogout" type="button">Выйти</button></nav>
-<section id="employeesScreen" class="hidden"><div class="server-dashboard"><h2>Сотрудники MOTO TECH</h2><p class="muted">Учётные записи сотрудников из PostgreSQL</p><div id="employeeList" class="card"></div></div></section>
+<section id="employeesScreen" class="hidden"><div class="server-dashboard"><h2>Сотрудники MOTO TECH</h2><p class="muted">Учётные записи сотрудников из PostgreSQL</p><div class="row dashboard-content"><div class="card"><h3>Список сотрудников</h3><div id="employeeList"></div></div>
+<div id="newEmployeePanel" class="card hidden"><h3>Добавить сотрудника</h3><form id="employeeCreate">
+<label>ФИО</label><input name="full_name" required minlength="3" maxlength="250" autocomplete="off">
+<label>Должность</label><input name="position" required minlength="2" maxlength="150" placeholder="Например, старший механик">
+<label>Логин</label><input name="username" required minlength="3" maxlength="40" pattern="[a-z][a-z0-9._-]*" placeholder="ivanov" autocomplete="off" autocapitalize="off">
+<label>Пароль (не менее 14 символов)</label><input name="password" type="password" minlength="14" maxlength="128" required autocomplete="new-password">
+<label>Роль доступа</label><select name="role" id="newEmployeeRole"><option value="mechanic">Механик</option><option value="manager">Управляющий</option><option value="administrator">Администратор</option></select>
+<p><button class="primary" type="submit">Создать сотрудника</button></p></form></div></div></div></section>
 <div id="fullSystem" class="hidden">
  <div class="server-dashboard">
   <div class="row"><div><h2>Панель управления</h2><p class="muted">Рабочие данные PostgreSQL · MOTO TECH</p></div><button type="button" id="reloadRepairs">Обновить данные</button></div>
@@ -98,7 +105,7 @@ body:has(#signIn:not(.hidden)) #status{max-width:450px;margin:12px auto;color:#f
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-let base='https://moto-tech-service-api.onrender.com',token='',current=null;
+let base='https://moto-tech-service-api.onrender.com',token='',current=null,staffRole='';
 const statusRu={draft:'Черновик',stored:'На хранении',return_requested:'Запрошена выдача',returned:'Выдан',cancelled:'Отменён'};
 const kindRu={front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',vin:'VIN',dashboard:'Приборная панель',damage:'Повреждение',pts:'ПТС',other:'Другое'};
 function status(message){$('status').textContent=message}
@@ -119,10 +126,23 @@ function switchSystem(view){
  if(employees)refreshEmployees().catch(e=>status(e.message));
 }
 async function refreshEmployees(){
+ $('newEmployeePanel').classList.toggle('hidden',!['owner_manager','administrator'].includes(staffRole));
+ const ownerOption=$('newEmployeeRole').querySelector('option[value="owner_manager"]');if(ownerOption)ownerOption.remove();
+ if(staffRole==='owner_manager'){$('newEmployeeRole').add(new Option('Руководитель (полный доступ)','owner_manager'))}
  const employees=await request('/employees');const holder=$('employeeList');holder.replaceChildren();
- for(const person of employees){const row=document.createElement('p');row.textContent=person.full_name+' · '+person.username+' · '+({owner_manager:'Руководитель',manager:'Управляющий',administrator:'Администратор',mechanic:'Механик'}[person.role]||person.role)+(person.active?'':' · неактивен');holder.append(row)}
+ for(const person of employees){const row=document.createElement('p');row.textContent=person.full_name+' · '+(person.position||'Сотрудник')+' · '+person.username+' · '+({owner_manager:'Руководитель',manager:'Управляющий',administrator:'Администратор',mechanic:'Механик'}[person.role]||person.role)+(person.active?'':' · неактивен');holder.append(row)}
  if(!employees.length)holder.textContent='Сотрудников нет';
 }
+$('employeeCreate').onsubmit=async event=>{
+ event.preventDefault();
+ const btn=event.currentTarget.querySelector('button[type="submit"]');btn.disabled=true;
+ try{
+  const data=Object.fromEntries(new FormData(event.currentTarget).entries());
+  await request('/employees',{method:'POST',body:data});
+  event.currentTarget.reset();await refreshEmployees();status('Учётная запись сотрудника создана. Пароль повторно не отображается.');
+ }catch(err){status('Не удалось добавить сотрудника: '+err.message)}
+ finally{btn.disabled=false}
+};
 $('openSystem').onclick=()=>switchSystem('full');
 $('openRepairs').onclick=()=>switchSystem('repairs');
 $('openStorage').onclick=()=>switchSystem('storage');
@@ -152,7 +172,7 @@ $('loginForm').onsubmit=async event=>{
   const data=await response.json().catch(()=>({}));
   if(!response.ok)throw Error(response.status===401?'Неверный логин или пароль':typeof data.detail==='string'?data.detail:'Не удалось войти');
   token=data.access_token;$('password').value='';
-  const me=await request('/auth/me');
+  const me=await request('/auth/me');staffRole=me.role;
   $('profile').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':me.role);
   await refresh();setSignedIn(true);$('staffMini').textContent=me.full_name+' · Руководитель';switchSystem('full');$('headerSub').textContent='Рабочая система';
   status('Вы вошли в систему.');
