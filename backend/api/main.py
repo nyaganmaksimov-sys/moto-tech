@@ -1173,6 +1173,7 @@ class EquipmentInput(BaseModel):
     location: str | None = Field(default=None,max_length=250)
     custodian_id: uuid.UUID | None = None
     condition: str = "working"
+    purchase_cost_rub: Decimal | None = Field(default=None,ge=0,le=1000000000)
     notes: str | None = Field(default=None,max_length=3000)
 
 class EquipmentAuditInput(BaseModel):
@@ -1193,11 +1194,11 @@ async def equipment_create(payload:EquipmentInput,person=Depends(require_roles("
     async with db.acquire() as c:
         try:
             return dict(await c.fetchrow("""INSERT INTO equipment_assets
-              (inventory_number,name,category,serial_number,manufacturer,model,location,custodian_id,condition,notes)
-              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *""",
+              (inventory_number,name,category,serial_number,manufacturer,model,location,custodian_id,condition,notes,purchase_cost_rub)
+              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *""",
               payload.inventory_number.strip(),payload.name.strip(),payload.category,
               payload.serial_number,payload.manufacturer,payload.model,payload.location,
-              payload.custodian_id,payload.condition,payload.notes))
+              payload.custodian_id,payload.condition,payload.notes,payload.purchase_cost_rub))
         except asyncpg.UniqueViolationError:raise HTTPException(409,"Инвентарный номер уже существует")
         except asyncpg.ForeignKeyViolationError:raise HTTPException(422,"Ответственный сотрудник не найден")
 
@@ -1217,3 +1218,25 @@ async def equipment_audits(person=Depends(require_roles(*ROLES)),db=Depends(data
         return [dict(r) for r in await c.fetch("""SELECT a.*,e.inventory_number,e.name
           FROM equipment_audits a JOIN equipment_assets e ON e.id=a.asset_id
           ORDER BY a.checked_at DESC LIMIT 300""")]
+
+class EquipmentCostUpdate(BaseModel):
+    purchase_cost_rub: Decimal | None = Field(default=None,ge=0,le=1000000000)
+
+@app.patch("/equipment/{asset_id}/purchase-cost")
+async def equipment_update_cost(asset_id:uuid.UUID,payload:EquipmentCostUpdate,
+    person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        row=await c.fetchrow("""UPDATE equipment_assets SET purchase_cost_rub=$2
+             WHERE id=$1 RETURNING id,inventory_number,purchase_cost_rub""",asset_id,payload.purchase_cost_rub)
+    if not row:raise HTTPException(404,"Оборудование не найдено")
+    return dict(row)
+
+@app.get("/equipment/valuation")
+async def equipment_valuation(person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        row=await c.fetchrow("""SELECT count(*) AS asset_count,
+          count(purchase_cost_rub) AS priced_count,
+          coalesce(sum(purchase_cost_rub),0) AS total_purchase_rub,
+          coalesce(sum(purchase_cost_rub) FILTER (WHERE condition <> 'retired'),0) AS active_purchase_rub
+          FROM equipment_assets""")
+    return dict(row)
