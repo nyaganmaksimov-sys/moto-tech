@@ -1348,7 +1348,7 @@ class TaskState(BaseModel):
 
 @app.patch("/crm/tasks/{task_id}/status")
 async def crm_update(task_id:uuid.UUID,payload:TaskState,person=Depends(require_roles(*ROLES)),db=Depends(database)):
-    if payload.status not in ("open","in_progress","done","cancelled"):
+    if payload.status not in ("open","in_progress","cancelled"):
         raise HTTPException(422,"Статус не поддерживается")
     async with db.acquire() as c:
         async with c.transaction():
@@ -1527,3 +1527,43 @@ async def crm_attachment_download(task_id:uuid.UUID,attachment_id:uuid.UUID,pers
     from urllib.parse import quote
     filename=quote(row["original_name"])
     return Response(content=data,media_type=row["content_type"],headers={"Content-Disposition":"attachment; filename*=UTF-8''"+filename,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
+
+class CrmReviewAction(BaseModel):
+    comment: str = Field(default="",max_length=3000)
+
+@app.post("/crm/tasks/{task_id}/submit-review")
+async def crm_submit_review(task_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        async with c.transaction():
+            prev=await c.fetchrow("SELECT status,assigned_to FROM crm_tasks WHERE id=$1 FOR UPDATE",task_id)
+            if not prev:raise HTTPException(404,"Задача не найдена")
+            if prev["assigned_to"]!=person["id"]:raise HTTPException(403,"Отправить на проверку может только исполнитель")
+            if prev["status"] not in ("open","in_progress"):raise HTTPException(409,"Задача не может быть отправлена на проверку")
+            await c.execute("UPDATE crm_tasks SET status='review',updated_at=now() WHERE id=$1",task_id)
+            await c.execute("INSERT INTO crm_task_reviews(task_id,actor_id,decision) VALUES($1,$2,'submitted')",task_id,person["id"])
+            await c.execute("INSERT INTO crm_task_events(task_id,actor_id,event_type,old_value,new_value) VALUES($1,$2,'status_changed',$3,'review')",task_id,person["id"],prev["status"])
+    return {"status":"review"}
+
+@app.post("/crm/tasks/{task_id}/review")
+async def crm_decide_review(task_id:uuid.UUID,decision:str,payload:CrmReviewAction,person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    if decision not in ("approve","return"):raise HTTPException(422,"Недопустимое решение")
+    if decision=="return" and not payload.comment.strip():raise HTTPException(422,"Укажите причину возврата")
+    target="done" if decision=="approve" else "in_progress"
+    async with db.acquire() as c:
+        async with c.transaction():
+            prev=await c.fetchrow("SELECT status,assigned_to FROM crm_tasks WHERE id=$1 FOR UPDATE",task_id)
+            if not prev:raise HTTPException(404,"Задача не найдена")
+            if prev["status"]!="review":raise HTTPException(409,"Задача не ожидает проверки")
+            if prev["assigned_to"]==person["id"]:raise HTTPException(403,"Нельзя проверять собственную работу")
+            await c.execute("UPDATE crm_tasks SET status=$2,updated_at=now() WHERE id=$1",task_id,target)
+            await c.execute("INSERT INTO crm_task_reviews(task_id,actor_id,decision,comment) VALUES($1,$2,$3,$4)",task_id,person["id"],decision,payload.comment.strip())
+            await c.execute("INSERT INTO crm_task_events(task_id,actor_id,event_type,old_value,new_value) VALUES($1,$2,'status_changed','review',$3)",task_id,person["id"],target)
+            await c.execute("INSERT INTO crm_event_notifications(recipient_id,task_id,message) VALUES($1,$2,$3)",prev["assigned_to"],task_id,"Задача принята руководителем" if decision=="approve" else "Задача возвращена на доработку: "+payload.comment.strip()[:300])
+    return {"status":target}
+
+@app.get("/crm/tasks/{task_id}/reviews")
+async def crm_review_history(task_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        await crm_assert_task_access(c,task_id,person)
+        rows=await c.fetch("SELECT r.decision,r.comment,r.created_at,e.full_name AS actor_name FROM crm_task_reviews r JOIN service_employees e ON e.id=r.actor_id WHERE r.task_id=$1 ORDER BY r.created_at DESC",task_id)
+    return [dict(x) for x in rows]
