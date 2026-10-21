@@ -122,7 +122,7 @@ function escapeQR(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<
 async function openVehicle(id){
 const panel=$('vehicleDetail');panel.style.display='block';panel.replaceChildren(elt('h2','Карточка техники'),elt('p','Загрузка…'));
 try{
-const vehicle=await db.from('vehicles').select('*').eq('id',id).single();if(vehicle.error)throw vehicle.error;
+const vehicle=await db.from('vehicles').select('*').eq('id',id).maybeSingle();if(vehicle.error)throw vehicle.error;if(!vehicle.data)throw new Error('Техника не найдена или у вас нет доступа к её карточке');
 const v=vehicle.data;
 const results=await Promise.all([
 db.from('customers').select('full_name,phone').eq('id',v.customer_id).maybeSingle(),
