@@ -176,6 +176,7 @@ if(table==='orders'){
 }
 if(table==='orders'){
  const docs=elt('div','','row');docs.append(elt('h3','Документы заказ-наряда'));
+ const printSet=elt('button','Печать комплекта: акт + заказ-наряд');printSet.type='button';printSet.onclick=async()=>{printSet.disabled=true;try{await printRepairDocument(r,'intake');await printRepairDocument(r,'order')}finally{printSet.disabled=false}};docs.append(printSet);
  for(const [kind,label] of [['intake','Акт приёма-передачи'],['order','Заказ-наряд'],['completed','Акт выполненных работ'],['handover','Акт выдачи']]){
   const button=elt('button',label);button.type='button';button.className='secondary';button.onclick=()=>printRepairDocument(r,kind);docs.append(button)
  }if(['owner_manager','manager','administrator'].includes(staff.role)){const savePdf=elt('button','Сформировать и сохранить PDF');savePdf.type='button';savePdf.onclick=async()=>{const kind=prompt('Тип документа: intake — приёмка, order — заказ-наряд, completed — акт работ, handover — выдача','order');if(!kind)return;savePdf.disabled=true;try{await archiveRepairPdf({db,staff,order:r,kind:kind.trim()});msg('PDF создан и сохранён в облачный архив');await openRecord('orders',id)}catch(error){msg('Ошибка PDF: '+error.message)}finally{savePdf.disabled=false}};docs.append(savePdf)}panel.append(docs);
