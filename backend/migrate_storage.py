@@ -169,6 +169,10 @@ async def run():
                 await connection.execute((base / "023_crm_approvals.sql").read_text(encoding="utf-8"))
                 print("Applied: 023_crm_approvals.sql")
             print("CRM approvals schema checks passed")
+            if not await connection.fetchval("SELECT 1 FROM information_schema.columns WHERE table_name='repair_orders' AND column_name='damage_description'"):
+                await connection.execute((base / "024_repair_inspection.sql").read_text(encoding="utf-8"))
+                print("Applied: 024_repair_inspection.sql")
+            print("Repair inspection schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
