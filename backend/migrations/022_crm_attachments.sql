@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS crm_task_attachments (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid NOT NULL REFERENCES crm_tasks(id) ON DELETE CASCADE, uploaded_by uuid NOT NULL REFERENCES service_employees(id), original_name text NOT NULL, content_type text NOT NULL, size_bytes integer NOT NULL, object_key text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS crm_task_attachments_task_idx ON crm_task_attachments(task_id,created_at DESC);
