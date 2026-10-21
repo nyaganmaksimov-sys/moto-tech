@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MOTO TECH — Приёмка техники</title>
+<style>
+:root{font:15px system-ui,Arial;background:#101217;color:#ecedf0;color-scheme:dark}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1100px;margin:auto;padding:24px}
+a{color:#ff6262}.top{display:flex;align-items:center;justify-content:space-between;gap:12px}h1{font-size:26px}h2{font-size:18px}.card{background:#1c2028;border:1px solid #353944;border-radius:14px;padding:20px;margin:16px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.photo{border:1px dashed #5a616c;border-radius:12px;padding:12px}.photo img{display:none;width:100%;height:140px;object-fit:contain;margin-top:12px}
+label{display:block;color:#bbc1cb;font-size:13px;margin-bottom:6px}input,select,textarea{display:block;width:100%;background:#11141a;color:white;border:1px solid #48505c;border-radius:8px;padding:11px;font:inherit}
+button{padding:12px 18px;background:#d63232;color:white;border:0;border-radius:8px;cursor:pointer;font:inherit}button:disabled{opacity:.5;cursor:wait}
+small{color:#aab0bc}.error{color:#ff9b81}.ok{color:#80d4ae}.photos{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px}
+table{width:100%;border-collapse:collapse}th,td{padding:10px;border-bottom:1px solid #383e47;text-align:left}#history{overflow-x:auto}
+</style></head><body><main class="wrap"><header class="top"><h1>MOTO <span style="color:#e03b3b">TECH</span> · Приёмка</h1><a href="/">← К системе</a></header>
+<p>Оформление техники на ремонт или хранение. VIN не обязателен. Четыре фотографии обязательны при любой приёмке.</p>
+<div class="card"><h2>Новая приёмка</h2><form id="intakeForm">
+<div class="grid"><div><label>Клиент *</label><select id="customer" required></select></div><div><label>Техника клиента *</label><select id="vehicle" required></select></div>
+<div><label>Тип приёмки *</label><select id="purpose"><option value="repair">Ремонт</option><option value="storage">Хранение</option></select></div></div>
+<p><small>Если клиента или техники ещё нет в базе, <a href="/#customers">добавьте их на главной странице</a> и вернитесь к приёмке.</small></p>
+<div><label>Осмотр, комплектность и замечания</label><textarea id="notes" rows="4" placeholder="Внешний вид, царапины, комплектация, уровень топлива, ключи, повреждения"></textarea></div>
+<h2>Обязательные фото *</h2><div id="requiredPhotos" class="photos"></div>
+<h2>Дополнительные фото</h2><div id="extraPhotos" class="photos"></div><p><button id="addDamage" type="button">+ Фото повреждений</button> <button id="addOther" type="button">+ Другое фото</button></p>
+<p><small>JPEG или PNG, до 8 МБ каждый. Фото ПТС — только при необходимости и при наличии правомерного основания обработки персональных данных.</small></p>
+<div class="grid"><div class="photo"><label>Фото ПТС (необязательно)</label><input type="file" id="pts" accept="image/jpeg,image/png" capture="environment"></div></div>
+<p id="message" role="status"></p><button id="save" type="submit">Сохранить приёмку</button></form></div>
+<div class="card"><h2>Последние приёмки</h2><div id="history"></div></div>
+</main><script>
+const $=id=>document.getElementById(id);
+let customers=[],vehicles=[],optionalCount=0;
+const names={front:"Спереди",rear:"Сзади",left:"Слева",right:"Справа"};
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function request(path,options){const r=await fetch("/api/"+path,options);const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(typeof j.detail==="string"?j.detail:JSON.stringify(j.detail||"Ошибка"));return j}
+function photoField(type,name,required=false){
+const box=document.createElement("div");box.className="photo";
+const label=document.createElement("label");label.textContent=name+(required?" *":"");
+const input=document.createElement("input");input.type="file";input.accept="image/jpeg,image/png";input.required=required;input.dataset.angle=type;input.capture="environment";
+const preview=document.createElement("img");preview.alt="Предпросмотр "+name;
+input.onchange=()=>{const file=input.files[0];if(preview.dataset.url)URL.revokeObjectURL(preview.dataset.url);preview.style.display=file?"block":"none";if(file){preview.dataset.url=URL.createObjectURL(file);preview.src=preview.dataset.url}};
+box.append(label,input,preview);return box}
+for(const [key,name] of Object.entries(names))$("requiredPhotos").append(photoField(key,name,true));
+function addPhoto(angle){if(optionalCount>=15){message("Не более 15 дополнительных фотографий",true);return}optionalCount++;$("extraPhotos").append(photoField(angle,angle==="damage"?"Повреждение":"Дополнительное фото"))}
+$("addDamage").onclick=()=>addPhoto("damage");$("addOther").onclick=()=>addPhoto("other");
+function message(s,err=false){$("message").className=err?"error":"ok";$("message").textContent=s}
+function updateVehicles(){const id=Number($("customer").value);const filtered=vehicles.filter(v=>v.customer_id===id);$("vehicle").innerHTML=filtered.map(v=>'<option value="'+v.id+'">'+esc([v.kind,v.brand,v.model,v.vin].filter(Boolean).join(" · "))+"</option>").join("")}
+$("customer").onchange=updateVehicles;
+async function load(){try{[customers,vehicles]=await Promise.all([request("customers"),request("vehicles")]);$("customer").innerHTML=customers.map(c=>'<option value="'+c.id+'">'+esc(c.name)+"</option>").join("");updateVehicles();await history()}catch(e){message(e.message,true)}}
+async function history(){const rows=await request("intakes");$("history").innerHTML='<table><thead><tr><th>№</th><th>Дата</th><th>Клиент</th><th>Техника</th><th>Тип</th><th>Фото</th></tr></thead><tbody>'+rows.map(x=>'<tr><td>MT-IN-'+String(x.id).padStart(6,"0")+'</td><td>'+esc(x.created_at)+'</td><td>'+esc(x.customer_name)+'</td><td>'+esc([x.brand,x.model].filter(Boolean).join(" "))+'</td><td>'+(x.purpose==="storage"?"Хранение":"Ремонт")+'</td><td><button type="button" onclick="showPhotos('+x.id+')">'+x.photo_count+' · открыть</button></td></tr>').join("")+'</tbody></table>'}
+async function showPhotos(id){try{const data=await request("intakes/"+id);const w=window.open("","_blank");if(!w){message("Разрешите открытие окна для просмотра фотографий",true);return}w.document.title="Приёмка MT-IN-"+id;w.document.body.style.cssText="background:#141820;color:white;font:16px system-ui";w.document.body.append("Фото приёмки MT-IN-"+id);data.photos.forEach(p=>{const div=w.document.createElement("div"),img=w.document.createElement("img");div.textContent=(names[p.angle]||p.angle)+": ";img.src="/api/intakes/"+id+"/photos/"+p.id;img.style.cssText="max-width:90vw;max-height:70vh;display:block;margin:12px 0 24px";div.append(img);w.document.body.append(div)})}catch(e){message(e.message,true)}}
+async function base64(file){if(!file||!["image/jpeg","image/png"].includes(file.type))throw Error("Нужно изображение JPEG или PNG");if(file.size>8*1024*1024)throw Error(file.name+": размер больше 8 МБ");const buffer=await file.arrayBuffer();const bytes=new Uint8Array(buffer);let binary="";for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(binary)}
+$("intakeForm").onsubmit=async e=>{e.preventDefault();$("save").disabled=true;try{if(!$("vehicle").value)throw Error("Сначала добавьте технику клиента");const photos=[];for(const input of document.querySelectorAll("[data-angle]"))if(input.files[0])photos.push({angle:input.dataset.angle,data:await base64(input.files[0])});if($("pts").files[0])photos.push({angle:"pts",data:await base64($("pts").files[0])});const saved=await request("intakes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({customer_id:Number($("customer").value),vehicle_id:Number($("vehicle").value),purpose:$("purpose").value,condition_notes:$("notes").value,photos})});message("Приёмка "+saved.number+" сохранена. Фотографий: "+saved.photo_count);$("intakeForm").reset();$("extraPhotos").replaceChildren();optionalCount=0;document.querySelectorAll(".photo img").forEach(img=>{if(img.dataset.url)URL.revokeObjectURL(img.dataset.url);img.removeAttribute("src");img.style.display="none"});await history()}catch(err){message(err.message,true)}finally{$("save").disabled=false}};
+load();
+</script></body></html>
