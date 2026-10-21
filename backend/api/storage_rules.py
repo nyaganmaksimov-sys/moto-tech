@@ -5,7 +5,7 @@ These rules are not an API and MUST NOT be treated as authorization.
 import re
 
 PHOTO_KINDS = frozenset({"front", "rear", "left", "right", "vin", "dashboard", "damage", "other", "pts"})
-REQUIRED_INTAKE_PHOTOS = frozenset({"front", "rear", "left", "right", "vin"})
+REQUIRED_INTAKE_PHOTOS = frozenset({"front", "rear", "left", "right"})
 ALLOWED_TRANSITIONS = {
     "draft": frozenset({"stored", "cancelled"}),
     "stored": frozenset({"return_requested"}),
