@@ -306,7 +306,9 @@ function showCrmTasks(){
  const due=document.createElement('small');due.textContent='Исполнитель: '+(t.assignee_name||'—')+' · Постановщик: '+(t.creator_name||'—')+' · Срок: '+(t.due_at?new Date(t.due_at).toLocaleString('ru-RU'):'не установлен')+' · '+({high:'Высокий',normal:'Обычный',low:'Низкий'}[t.priority]||t.priority)+(isLate(t)?' · ПРОСРОЧЕНО':'');
  const state=document.createElement('select');for(const [key,label] of [['open','Новая'],['in_progress','В работе'],['done','Выполнена'],['cancelled','Отменена']])state.add(new Option(label,key));
  state.value=t.status;state.onchange=async()=>{state.disabled=true;try{await request('/crm/tasks/'+t.id+'/status',{method:'PATCH',body:{status:state.value}});await refreshCrm()}catch(e){status(e.message);await refreshCrm()}};
- const link=document.createElement('p');link.textContent=(t.repair_id?'Заказ-наряд: '+t.repair_id+' ':'')+(t.storage_id?'Хранение: '+t.storage_id:'');
+ const link=document.createElement('div');
+ if(t.repair_id){const btn=document.createElement('button');btn.type='button';btn.textContent='Открыть заказ-наряд';btn.onclick=()=>{switchSystem('repairs');status('Заказ-наряд открыт в списке ремонтов')};link.append(btn)}
+ if(t.storage_id){const btn=document.createElement('button');btn.type='button';btn.textContent='Открыть карточку хранения';btn.onclick=()=>{switchSystem('storage');openRecord(t.storage_id).catch(err=>status(err.message))};link.append(btn)}
  const comments=document.createElement('details');const caption=document.createElement('summary');caption.textContent='Обсуждение задачи';comments.append(caption);
  const thread=document.createElement('div');comments.append(thread);
  comments.ontoggle=async()=>{if(!comments.open)return;try{const data=await request('/crm/tasks/'+t.id+'/comments');thread.replaceChildren();for(const msg of data){const p=document.createElement('p');p.textContent=new Date(msg.created_at).toLocaleString('ru-RU')+' · '+msg.body;thread.append(p)}if(!data.length)thread.textContent='Комментариев пока нет'}catch(err){thread.textContent=err.message}};
