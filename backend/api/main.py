@@ -1351,8 +1351,15 @@ async def crm_update(task_id:uuid.UUID,payload:TaskState,person=Depends(require_
     if payload.status not in ("open","in_progress","done","cancelled"):
         raise HTTPException(422,"Статус не поддерживается")
     async with db.acquire() as c:
-        row=await c.fetchrow("UPDATE crm_tasks SET status=$2,updated_at=now() WHERE id=$1 AND (assigned_to=$3 OR created_by=$3) RETURNING *",task_id,payload.status,person["id"])
-    if not row:raise HTTPException(404,"Задача не найдена")
+        async with c.transaction():
+            prev=await c.fetchrow("SELECT status,assigned_to,created_by FROM crm_tasks WHERE id=$1 FOR UPDATE",task_id)
+            if not prev:raise HTTPException(404,"Задача не найдена")
+            manager=person["role"] in ("owner_manager","manager","administrator")
+            if not manager and person["id"] not in (prev["assigned_to"],prev["created_by"]):
+                raise HTTPException(403,"Нет доступа")
+            row=await c.fetchrow("UPDATE crm_tasks SET status=$2,updated_at=now() WHERE id=$1 RETURNING *",task_id,payload.status)
+            if prev["status"]!=payload.status:
+                await c.execute("INSERT INTO crm_task_events(task_id,actor_id,event_type,old_value,new_value) VALUES($1,$2,'status_changed',$3,$4)",task_id,person["id"],prev["status"],payload.status)
     return dict(row)
 
 class CrmComment(BaseModel):
@@ -1385,3 +1392,14 @@ async def crm_alerts(person=Depends(require_roles(*ROLES)),db=Depends(database))
           ORDER BY due_at NULLS LAST,created_at DESC LIMIT 50""",person["id"])
     return {"total":len(records),"overdue":sum(bool(x["overdue"]) for x in records),
             "tasks":[dict(r) for r in records]}
+
+@app.get("/crm/tasks/{task_id}/history")
+async def crm_task_history(task_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        task=await c.fetchrow("SELECT assigned_to,created_by FROM crm_tasks WHERE id=$1",task_id)
+        if not task:raise HTTPException(404,"Задача не найдена")
+        manager=person["role"] in ("owner_manager","manager","administrator")
+        if not manager and person["id"] not in (task["assigned_to"],task["created_by"]):
+            raise HTTPException(403,"Нет доступа")
+        rows=await c.fetch("SELECT ev.event_type,ev.old_value,ev.new_value,ev.created_at,emp.full_name AS actor_name FROM crm_task_events ev JOIN service_employees emp ON emp.id=ev.actor_id WHERE ev.task_id=$1 ORDER BY ev.created_at DESC LIMIT 200",task_id)
+    return [dict(r) for r in rows]
