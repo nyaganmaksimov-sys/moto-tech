@@ -1278,3 +1278,29 @@ async def equipment_maintenance_add(asset_id:uuid.UUID,payload:EquipmentMaintena
         if not await c.fetchval("SELECT EXISTS(SELECT 1 FROM equipment_assets WHERE id=$1)",asset_id):
             raise HTTPException(404,"Оборудование не найдено")
         return dict(await c.fetchrow("INSERT INTO equipment_maintenance(asset_id,event_type,description,cost_rub,next_due_at,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",asset_id,payload.event_type,payload.description.strip(),payload.cost_rub,payload.next_due_at.date() if payload.next_due_at else None,person["id"]))
+
+@app.get("/equipment/maintenance/due")
+async def equipment_due(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        rows=await c.fetch("""SELECT a.id,a.inventory_number,a.name,
+          m.next_due_at, m.description
+          FROM equipment_assets a JOIN LATERAL (
+             SELECT next_due_at,description FROM equipment_maintenance
+             WHERE asset_id=a.id AND next_due_at IS NOT NULL
+             ORDER BY performed_at DESC,created_at DESC LIMIT 1
+          ) m ON TRUE WHERE a.condition <> 'retired'
+          AND m.next_due_at <= CURRENT_DATE + INTERVAL '30 days'
+          ORDER BY m.next_due_at LIMIT 200""")
+    return [dict(x) for x in rows]
+
+@app.get("/equipment/{asset_id}/qr")
+async def equipment_qr(asset_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    import qrcode
+    from qrcode.image.svg import SvgPathImage
+    async with db.acquire() as c:
+        asset=await c.fetchrow("SELECT inventory_number,name FROM equipment_assets WHERE id=$1",asset_id)
+    if not asset:raise HTTPException(404,"Оборудование не найдено")
+    target="https://moto-tech-storage-test.onrender.com/?equipment="+str(asset_id)
+    code=qrcode.make(target,image_factory=SvgPathImage,box_size=8,border=2)
+    return {"inventory_number":asset["inventory_number"],"name":asset["name"],
+            "url":target,"svg":code.to_string(encoding="unicode")}
