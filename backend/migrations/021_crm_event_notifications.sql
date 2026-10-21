@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS crm_event_notifications (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), recipient_id uuid NOT NULL REFERENCES service_employees(id), task_id uuid NOT NULL REFERENCES crm_tasks(id) ON DELETE CASCADE, message text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), read_at timestamptz);
+CREATE INDEX IF NOT EXISTS crm_event_notifications_recipient_idx ON crm_event_notifications(recipient_id,created_at DESC);
