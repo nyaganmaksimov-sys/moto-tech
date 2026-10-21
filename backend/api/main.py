@@ -1366,3 +1366,12 @@ async def read_crm_comments(task_id:uuid.UUID,person=Depends(require_roles(*ROLE
         if person["role"]=="mechanic" and person["id"] not in (task["assigned_to"],task["created_by"]):
             raise HTTPException(403,"Нет доступа")
         return [dict(x) for x in await c.fetch("SELECT body,created_at FROM crm_task_comments WHERE task_id=$1 ORDER BY created_at",task_id)]
+
+@app.post("/crm/tasks/{task_id}/comments",status_code=201)
+async def add_crm_comment(task_id:uuid.UUID,payload:CrmComment,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        task=await c.fetchrow("SELECT assigned_to,created_by FROM crm_tasks WHERE id=$1",task_id)
+        if not task:raise HTTPException(404,"Задача не найдена")
+        if person["role"]=="mechanic" and person["id"] not in (task["assigned_to"],task["created_by"]):
+            raise HTTPException(403,"Нет доступа")
+        return dict(await c.fetchrow("INSERT INTO crm_task_comments(task_id,author_id,body) VALUES($1,$2,$3) RETURNING *",task_id,person["id"],payload.body.strip()))
