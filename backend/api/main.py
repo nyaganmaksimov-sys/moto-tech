@@ -1567,3 +1567,16 @@ async def crm_review_history(task_id:uuid.UUID,person=Depends(require_roles(*ROL
         await crm_assert_task_access(c,task_id,person)
         rows=await c.fetch("SELECT r.decision,r.comment,r.created_at,e.full_name AS actor_name FROM crm_task_reviews r JOIN service_employees e ON e.id=r.actor_id WHERE r.task_id=$1 ORDER BY r.created_at DESC",task_id)
     return [dict(x) for x in rows]
+
+@app.get("/crm/staff-performance")
+async def crm_staff_performance(person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        rows=await c.fetch("""SELECT e.id,e.full_name,e.position,
+          count(t.id) FILTER (WHERE t.status IN ('open','in_progress','review')) AS active,
+          count(t.id) FILTER (WHERE t.status='review') AS pending_review,
+          count(t.id) FILTER (WHERE t.status='done') AS approved,
+          count(t.id) FILTER (WHERE t.due_at<now() AND t.status IN ('open','in_progress','review')) AS overdue,
+          (SELECT count(*) FROM crm_task_reviews rv JOIN crm_tasks rt ON rt.id=rv.task_id WHERE rt.assigned_to=e.id AND rv.decision='return') AS returns
+          FROM service_employees e LEFT JOIN crm_tasks t ON t.assigned_to=e.id
+          WHERE e.active=true GROUP BY e.id,e.full_name,e.position ORDER BY e.full_name""")
+    return [dict(r) for r in rows]
