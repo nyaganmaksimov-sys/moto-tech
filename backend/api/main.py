@@ -1328,7 +1328,7 @@ class TaskNew(BaseModel):
 @app.get("/crm/tasks")
 async def crm_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
     async with db.acquire() as c:
-        records=await c.fetch("SELECT * FROM crm_tasks WHERE assigned_to=$1 OR created_by=$1 ORDER BY due_at NULLS LAST LIMIT 300",person["id"])
+        records=await c.fetch("SELECT t.*,a.full_name AS assignee_name,b.full_name AS creator_name FROM crm_tasks t JOIN service_employees a ON a.id=t.assigned_to JOIN service_employees b ON b.id=t.created_by WHERE ($2::boolean OR t.assigned_to=$1 OR t.created_by=$1) ORDER BY t.due_at NULLS LAST,t.created_at DESC LIMIT 500",person["id"],person["role"] in ("owner_manager","manager","administrator"))
     return [dict(x) for x in records]
 
 @app.post("/crm/tasks",status_code=201)
