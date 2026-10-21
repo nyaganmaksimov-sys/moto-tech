@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS crm_notification_reads (employee_id uuid NOT NULL REFERENCES service_employees(id), notification_key text NOT NULL, read_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(employee_id,notification_key));
