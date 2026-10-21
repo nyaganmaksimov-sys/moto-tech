@@ -603,6 +603,10 @@ async function enterWorkspace(me){
  staffRole=me.role;staffId=me.id;authProfile=me;
  $('profile').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':me.role);
  await refresh();setSignedIn(true);$('staffMini').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':'Сотрудник');switchSystem('full');$('headerSub').textContent='Рабочая система';
+ const repairParam=new URLSearchParams(location.search).get('repair');
+ if(repairParam&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(repairParam)){
+  switchSystem('repairs');await refreshRepairs();focusRepairFromQr(repairParam);history.replaceState(null,'',location.pathname);
+ }
  const pending=new URLSearchParams(location.search).get('storage');
  if(pending&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(pending)){
   switchSystem('storage');await openRecord(pending);history.replaceState(null,'',location.pathname);
@@ -730,6 +734,28 @@ function applyRepairFilters(){
 }
 $('repairSearch').addEventListener('input',applyRepairFilters);
 $('repairFilterStatus').addEventListener('change',applyRepairFilters);
+async function printRepairQR(id){
+ const win=window.open('','_blank');if(!win){status('Разрешите всплывающие окна для печати QR');return}
+ try{
+  const data=await request('/repairs/'+encodeURIComponent(id)+'/qr');
+  const heading=win.document.createElement('h2');heading.textContent='MOTO TECH · РЕМОНТ';
+  const number=win.document.createElement('p');number.textContent='Заказ-наряд '+data.order_number;
+  const moto=win.document.createElement('p');moto.textContent=data.motorcycle;
+  const qr=win.document.createElement('img');qr.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(data.svg);qr.width=220;qr.height=220;
+  const info=win.document.createElement('p');info.textContent='Сканируйте для просмотра неисправностей и хода ремонта (требуется вход)';
+  win.document.body.append(heading,number,moto,qr,info);qr.onload=()=>win.print()
+ }catch(e){win.close();status(e.message)}
+}
+function focusRepairFromQr(id){
+ switchSystem('repairs');
+ $('repairSearch').value='';$('repairFilterStatus').value='all';applyRepairFilters();
+ const card=document.getElementById('repair-'+id);
+ if(!card){status('Заказ-наряд не найден в текущем списке');return}
+ card.scrollIntoView({behavior:'smooth',block:'center'});card.style.outline='2px solid #dba84c';
+ const details=card.querySelectorAll('details');for(const d of details)if(d.querySelector('summary')?.textContent?.includes('Осмотр'))d.open=true;
+ const record=repairRows.find(x=>x.id===id);
+ if(record){const p=document.createElement('p');p.textContent='Заявленная неисправность: '+(record.complaint||'Не указана')+' · Состояние: '+(record.intake_condition||'Не указано')+' · Повреждения: '+(record.damage_description||'Не указаны');p.style.padding='8px';card.prepend(p)}
+}
 async function refreshRepairs(){
  const [orders,storages,employees]=await Promise.all([request('/repairs'),request('/storage'),request('/employees')]);
  repairRows=orders;
@@ -780,10 +806,11 @@ async function refreshRepairs(){
   const worksBtn=document.createElement('button');worksBtn.type='button';worksBtn.textContent='Работы и стоимость';const workPanel=document.createElement('div');worksBtn.onclick=()=>showRepairWorks(item.id,workPanel);
   const addWork=document.createElement('button');addWork.type='button';addWork.textContent='Добавить работу';addWork.disabled=['issued','cancelled'].includes(item.status);addWork.onclick=()=>addRepairWork(item.id);
   const estimateBtn=document.createElement('button');estimateBtn.type='button';estimateBtn.textContent='Расчёт заказа';const estimate=document.createElement('div');estimateBtn.onclick=()=>showRepairStatement(item.id,estimate);
+  const qrBtn=document.createElement('button');qrBtn.type='button';qrBtn.textContent='QR-наклейка ремонта';qrBtn.onclick=()=>printRepairQR(item.id);
   const taskBtn=document.createElement('button');taskBtn.type='button';taskBtn.textContent='Поставить задачу по ремонту';taskBtn.onclick=()=>openCrmFor('repair',item.id);
   const history=document.createElement('details');const summary=document.createElement('summary');summary.textContent='История заказ-наряда';history.append(summary);
   const historyRows=document.createElement('div');history.append(historyRows);history.ontoggle=async()=>{if(!history.open)return;try{const rows=await request('/repairs/'+item.id+'/events');historyRows.replaceChildren();for(const ev of rows){const p=document.createElement('p');const changes=ev.event_type==='status_changed'?' · '+(repairStatusRu[ev.payload.from]||ev.payload.from)+' → '+(repairStatusRu[ev.payload.to]||ev.payload.to):'';p.textContent=new Date(ev.happened_at).toLocaleString('ru-RU')+' · '+ev.actor_name+' · '+({created:'Заказ создан',work_added:'Добавлена работа',status_changed:'Статус изменён',mechanic_assigned:'Назначен механик',inspection_updated:'Обновлён осмотр'}[ev.event_type]||ev.event_type)+changes;historyRows.append(p)}if(!rows.length)historyRows.textContent='История пуста'}catch(err){historyRows.textContent=err.message}};
-  container.append(worksBtn,addWork,workPanel,estimateBtn,estimate,taskBtn,history);box.append(container)
+  container.append(worksBtn,addWork,workPanel,estimateBtn,estimate,qrBtn,taskBtn,history);box.append(container)
  }
  applyRepairFilters();
 }
