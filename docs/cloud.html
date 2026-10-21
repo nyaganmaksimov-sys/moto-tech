@@ -255,14 +255,14 @@ async function loadStaffNotifications(){
 async function loadAuditLog(){
  if(!staff||!['owner_manager','manager','administrator'].includes(staff.role))return;
  const box=$('auditItems');box.replaceChildren(elt('p','Загрузка журнала…','muted'));
- let q=db.from('staff_audit_log').select('created_at,actor_login,action,entity,record_id,details').order('created_at',{ascending:false}).limit(200);
+ let q=db.from('staff_audit_log').select('created_at,actor_login,actor_name,action,entity,record_id,details').order('created_at',{ascending:false}).limit(200);
  if($('auditEmployee').value)q=q.eq('actor_login',$('auditEmployee').value);
  if($('auditAction').value)q=q.eq('action',$('auditAction').value);
  if($('auditFrom').value)q=q.gte('created_at',new Date($('auditFrom').value+'T00:00:00').toISOString());
  const r=await q;if(r.error){box.replaceChildren(elt('p','Ошибка загрузки: '+r.error.message,'muted'));return}
  box.replaceChildren();if(!r.data.length){box.append(elt('p','Событий по выбранным фильтрам нет','muted'));return}
  const verbs={insert:'Создание',update:'Изменение',delete:'Удаление'};
- for(const x of r.data){const item=elt('div','','item');const when=new Date(x.created_at).toLocaleString('ru-RU');item.append(elt('b',when+' · '+(x.actor_login||'Системное действие')),elt('p',(verbs[x.action]||x.action)+' · '+x.entity+' · '+(x.details?.label||x.record_id||'—'),'muted'));if(x.details?.changed_fields?.length)item.append(elt('small','Изменённые поля: '+x.details.changed_fields.join(', ')));box.append(item)}
+ for(const x of r.data){const item=elt('div','','item');const when=new Date(x.created_at).toLocaleString('ru-RU');const who=x.actor_name?(x.actor_name+(x.actor_login?' ('+x.actor_login+')':'')):(x.actor_login||'Система — техническая операция, без входа сотрудника');item.append(elt('b',when+' · '+who),elt('p',(verbs[x.action]||x.action)+' · '+x.entity+' · '+(x.details?.label||x.record_id||'—'),'muted'));if(x.details?.changed_fields?.length)item.append(elt('small','Изменённые поля: '+x.details.changed_fields.join(', ')));box.append(item)}
 }
 async function loadAuditEmployees(){const s=$('auditEmployee');if(s.options.length>1)return;const r=await db.from('staff').select('login,full_name').order('full_name');if(r.error)return;for(const x of r.data){if(!x.login)continue;const o=document.createElement('option');o.value=x.login;o.textContent=(x.full_name||x.login)+' ('+x.login+')';s.append(o)}}
 $('auditRefresh').onclick=loadAuditLog;
