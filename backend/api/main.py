@@ -1592,3 +1592,25 @@ async def repair_event_history(repair_id:uuid.UUID,person=Depends(require_roles(
             LEFT JOIN service_employees emp ON emp.id=ev.actor_id
             WHERE ev.order_id=$1 ORDER BY ev.happened_at DESC LIMIT 250""",repair_id)
     return [dict(r) for r in rows]
+
+class RepairInspectionUpdate(BaseModel):
+    intake_condition: str = Field(default="",max_length=5000)
+    damage_description: str = Field(default="",max_length=5000)
+    accessories_received: str = Field(default="",max_length=3000)
+    fuel_level: str = Field(default="",max_length=100)
+    mileage_km: Decimal | None = Field(default=None,ge=0)
+
+@app.patch("/repairs/{repair_id}/inspection")
+async def update_repair_inspection(repair_id:uuid.UUID,payload:RepairInspectionUpdate,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        async with c.transaction():
+            old=await c.fetchrow("SELECT id,status,version FROM repair_orders WHERE id=$1 FOR UPDATE",repair_id)
+            if not old:raise HTTPException(404,"Заказ-наряд не найден")
+            if old["status"] in ("issued","cancelled"):raise HTTPException(409,"Закрытый заказ нельзя редактировать")
+            row=await c.fetchrow("""UPDATE repair_orders SET intake_condition=$2,damage_description=$3,
+                accessories_received=$4,fuel_level=$5,mileage_km=$6,inspection_updated_at=now(),
+                updated_at=now(),updated_by=$7,version=version+1 WHERE id=$1 RETURNING *""",
+                repair_id,payload.intake_condition,payload.damage_description,payload.accessories_received,
+                payload.fuel_level,payload.mileage_km,person["id"])
+            await c.execute("INSERT INTO repair_order_events(order_id,actor_id,event_type) VALUES($1,$2,'inspection_updated')",repair_id,person["id"])
+    return dict(row)
