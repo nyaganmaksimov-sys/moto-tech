@@ -1667,3 +1667,15 @@ async def get_repair_photo(repair_id:uuid.UUID,photo_id:uuid.UUID,person=Depends
     try:data=await run_in_threadpool(supabase_storage.download_private_image,key)
     except Exception:raise HTTPException(502,"Ошибка получения фото")
     return Response(content=data,media_type="image/jpeg",headers={"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
+
+@app.get("/repairs/{repair_id}/qr")
+async def repair_qr(repair_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    import qrcode
+    from qrcode.image.svg import SvgPathImage
+    async with db.acquire() as c:
+        order=await c.fetchrow("SELECT order_number,brand,model,status FROM repair_orders WHERE id=$1",repair_id)
+    if not order:raise HTTPException(404,"Заказ-наряд не найден")
+    target="https://moto-tech-storage-test.onrender.com/?repair="+str(repair_id)
+    img=qrcode.make(target,image_factory=SvgPathImage,box_size=8,border=2)
+    return {"order_number":order["order_number"],"motorcycle":(order["brand"]+" "+order["model"]).strip(),
+            "status":order["status"],"url":target,"svg":img.to_string().decode("utf-8")}
