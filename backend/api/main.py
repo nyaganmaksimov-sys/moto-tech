@@ -1354,3 +1354,15 @@ async def crm_update(task_id:uuid.UUID,payload:TaskState,person=Depends(require_
         row=await c.fetchrow("UPDATE crm_tasks SET status=$2,updated_at=now() WHERE id=$1 AND (assigned_to=$3 OR created_by=$3) RETURNING *",task_id,payload.status,person["id"])
     if not row:raise HTTPException(404,"Задача не найдена")
     return dict(row)
+
+class CrmComment(BaseModel):
+    body: str = Field(min_length=1,max_length=4000)
+
+@app.get("/crm/tasks/{task_id}/comments")
+async def read_crm_comments(task_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        task=await c.fetchrow("SELECT assigned_to,created_by FROM crm_tasks WHERE id=$1",task_id)
+        if not task:raise HTTPException(404,"Задача не найдена")
+        if person["role"]=="mechanic" and person["id"] not in (task["assigned_to"],task["created_by"]):
+            raise HTTPException(403,"Нет доступа")
+        return [dict(x) for x in await c.fetch("SELECT body,created_at FROM crm_task_comments WHERE task_id=$1 ORDER BY created_at",task_id)]
