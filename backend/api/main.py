@@ -1381,7 +1381,10 @@ async def add_crm_comment(task_id:uuid.UUID,payload:CrmComment,person=Depends(re
         if not task:raise HTTPException(404,"Задача не найдена")
         if person["role"]=="mechanic" and person["id"] not in (task["assigned_to"],task["created_by"]):
             raise HTTPException(403,"Нет доступа")
-        return dict(await c.fetchrow("INSERT INTO crm_task_comments(task_id,author_id,body) VALUES($1,$2,$3) RETURNING *",task_id,person["id"],payload.body.strip()))
+        row=await c.fetchrow("INSERT INTO crm_task_comments(task_id,author_id,body) VALUES($1,$2,$3) RETURNING *",task_id,person["id"],payload.body.strip())
+        for recipient in set((task["assigned_to"],task["created_by"]))-{person["id"]}:
+            await c.execute("INSERT INTO crm_event_notifications(recipient_id,task_id,message) VALUES($1,$2,$3)",recipient,task_id,"Новый комментарий к задаче")
+        return dict(row)
 
 @app.get("/crm/alerts")
 async def crm_alerts(person=Depends(require_roles(*ROLES)),db=Depends(database)):
@@ -1420,6 +1423,9 @@ async def edit_crm_assignment(task_id:uuid.UUID,payload:CrmTaskEdit,person=Depen
             for field,old,new in (("assignee_changed",previous["assigned_to"],payload.assigned_to),("due_changed",previous["due_at"],payload.due_at)):
                 if old!=new:
                     await c.execute("INSERT INTO crm_task_events(task_id,actor_id,event_type,old_value,new_value) VALUES($1,$2,$3,$4,$5)",task_id,person["id"],field,str(old) if old is not None else None,str(new) if new is not None else None)
+            recipients=set((previous["assigned_to"],payload.assigned_to))
+            for recipient in recipients-{person["id"]}:
+                await c.execute("INSERT INTO crm_event_notifications(recipient_id,task_id,message) VALUES($1,$2,$3)",recipient,task_id,"Изменён исполнитель или срок задачи")
     return dict(updated)
 
 @app.get("/crm/notifications")
@@ -1447,4 +1453,17 @@ async def crm_read_notification(payload:CrmNotificationRead,person=Depends(requi
         exists=await c.fetchval("SELECT EXISTS(SELECT 1 FROM crm_tasks WHERE id=$1 AND assigned_to=$2)",task_id,person["id"])
         if not exists:raise HTTPException(404,"Уведомление не найдено")
         await c.execute("INSERT INTO crm_notification_reads(employee_id,notification_key) VALUES($1,$2) ON CONFLICT DO NOTHING",person["id"],payload.key)
+    return {"ok":True}
+
+@app.get("/crm/events")
+async def crm_events(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        rows=await c.fetch("SELECT id,task_id,message,created_at,read_at FROM crm_event_notifications WHERE recipient_id=$1 ORDER BY created_at DESC LIMIT 100",person["id"])
+    return [dict(r) for r in rows]
+
+@app.post("/crm/events/{event_id}/read")
+async def crm_event_read(event_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        row=await c.fetchrow("UPDATE crm_event_notifications SET read_at=coalesce(read_at,now()) WHERE id=$1 AND recipient_id=$2 RETURNING id",event_id,person["id"])
+    if not row:raise HTTPException(404,"Уведомление не найдено")
     return {"ok":True}
