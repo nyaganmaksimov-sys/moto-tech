@@ -10,7 +10,8 @@ class StorageRulesTests(unittest.TestCase):
 
     def test_requires_all_views(self):
         self.assertEqual(photo_validation_errors(self.photos), [])
-        self.assertIn("vin", photo_validation_errors(self.photos[:-1])[0])
+        self.assertEqual(photo_validation_errors(self.photos[:-1]), [])
+        self.assertIn("rear", photo_validation_errors([{"kind": "front"}, {"kind": "left"}, {"kind": "right"}])[0])
 
     def test_damage_note_required(self):
         self.assertTrue(photo_validation_errors(self.photos + [{"kind": "damage", "note": ""}]))
