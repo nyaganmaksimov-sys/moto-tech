@@ -306,6 +306,23 @@ function showCrmTasks(){
  const due=document.createElement('small');due.textContent='Исполнитель: '+(t.assignee_name||'—')+' · Постановщик: '+(t.creator_name||'—')+' · Срок: '+(t.due_at?new Date(t.due_at).toLocaleString('ru-RU'):'не установлен')+' · '+({high:'Высокий',normal:'Обычный',low:'Низкий'}[t.priority]||t.priority)+(isLate(t)?' · ПРОСРОЧЕНО':'');
  const state=document.createElement('select');for(const [key,label] of [['open','Новая'],['in_progress','В работе'],['done','Выполнена'],['cancelled','Отменена']])state.add(new Option(label,key));
  state.value=t.status;state.onchange=async()=>{state.disabled=true;try{await request('/crm/tasks/'+t.id+'/status',{method:'PATCH',body:{status:state.value}});await refreshCrm()}catch(e){status(e.message);await refreshCrm()}};
+ if(['owner_manager','manager','administrator'].includes(staffRole)){
+  const edit=document.createElement('button');edit.type='button';edit.textContent='Изменить исполнителя и срок';
+  edit.onclick=async()=>{
+   const employees=await request('/employees');
+   const names=employees.filter(e=>e.active!==false);
+   const choices=names.map((e,i)=>(i+1)+'. '+e.full_name).join('\\n');
+   const chosen=prompt('Выберите номер исполнителя:\\n'+choices,String(Math.max(1,names.findIndex(e=>e.id===t.assigned_to)+1)));
+   if(chosen===null)return;const employee=names[Number(chosen)-1];
+   if(!employee){status('Выберите сотрудника из списка');return}
+   const old=t.due_at?new Date(t.due_at).toISOString().slice(0,16):'';
+   const date=prompt('Срок: ГГГГ-ММ-ДДTЧЧ:ММ (пусто — без срока)',old);
+   if(date===null)return;
+   const parsed=date.trim()?new Date(date):null;
+   if(parsed&&isNaN(parsed.getTime())){status('Некорректная дата');return}
+   try{await request('/crm/tasks/'+t.id+'/assignment',{method:'PATCH',body:{assigned_to:employee.id,due_at:parsed?parsed.toISOString():null}});await refreshCrm();status('Задача обновлена')}catch(err){status(err.message)}
+  };line.append(edit)
+ }
  const link=document.createElement('div');
  if(t.repair_id){const btn=document.createElement('button');btn.type='button';btn.textContent='Открыть заказ-наряд';btn.onclick=async()=>{switchSystem('repairs');await refreshRepairs();const card=[...document.querySelectorAll('#repairItems [data-repair-id]')].find(el=>el.dataset.repairId===t.repair_id);if(card){card.scrollIntoView({behavior:'smooth',block:'center'});card.style.outline='2px solid #dba84c'}else status('Заказ не найден в текущем списке')};link.append(btn)}
  if(t.storage_id){const btn=document.createElement('button');btn.type='button';btn.textContent='Открыть карточку хранения';btn.onclick=()=>{switchSystem('storage');openRecord(t.storage_id).catch(err=>status(err.message))};link.append(btn)}
