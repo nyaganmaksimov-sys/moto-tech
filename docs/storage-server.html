@@ -153,7 +153,7 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <p><button class="primary" type="submit">Сохранить черновик</button></p></form></div></div>
 </section>
 <section class="card hidden" id="detail">
-<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p><button id="storageQrButton" type="button" class="primary hidden">Печать QR-наклейки</button><div id="detailsGrid" class="info-grid"></div><details id="editCard"><summary>Редактировать карточку (управляющий)</summary><form id="editCardForm"><div id="editInputs"></div><button type="submit" class="primary">Сохранить изменения</button></form></details><div class="doc-actions"><button type="button" onclick="printStoragePaper('intake')">Печать акта приёмки</button><button type="button" onclick="printStoragePaper('agreement')">Договор хранения (проект)</button><button type="button" onclick="printStoragePaper('return')">Акт выдачи</button></div>
+<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p><button id="storageQrButton" type="button" class="primary hidden">Печать QR-наклейки</button><button id="storageCreateTask" type="button">Поставить задачу по хранению</button><div id="detailsGrid" class="info-grid"></div><details id="editCard"><summary>Редактировать карточку (управляющий)</summary><form id="editCardForm"><div id="editInputs"></div><button type="submit" class="primary">Сохранить изменения</button></form></details><div class="doc-actions"><button type="button" onclick="printStoragePaper('intake')">Печать акта приёмки</button><button type="button" onclick="printStoragePaper('agreement')">Договор хранения (проект)</button><button type="button" onclick="printStoragePaper('return')">Акт выдачи</button></div>
 <p>Для приёмки нужны фото: спереди, сзади, слева, справа и VIN. Повреждения снимайте отдельно.</p>
 <form id="upload"><div class="row"><div><label>Тип фотографии</label><select name="kind"><option value="front">Спереди</option><option value="rear">Сзади</option><option value="left">Слева</option><option value="right">Справа</option><option value="vin">VIN</option><option value="dashboard">Приборная панель</option><option value="damage">Повреждение</option><option value="pts">ПТС</option><option value="other">Другое</option></select></div>
 <div><label>Описание / место повреждения</label><input name="note" maxlength="2000"></div><div><label>Фото</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></div></div>
@@ -316,6 +316,14 @@ function showCrmTasks(){
 $('crmFilterAssignee').onchange=showCrmTasks;
 $('crmFilterState').onchange=showCrmTasks;
 $('crmFilterOverdue').onchange=showCrmTasks;
+async function openCrmFor(kind,id){
+ switchSystem('crm');await refreshCrm();
+ const field=kind==='repair'?'crmRepairSelect':'crmStorageSelect';
+ const select=$(field);
+ if([...select.options].some(o=>o.value===id))select.value=id;
+ $('crmCreate').querySelector('[name="title"]').focus();
+}
+$('storageCreateTask').onclick=()=>{if(current)openCrmFor('storage',current.id).catch(e=>status(e.message))};
 async function refreshCrm(){
  const [tasks,staff,repairs,storages]=await Promise.all([request('/crm/tasks'),request('/employees'),request('/repairs'),request('/storage')]);crmCachedTasks=tasks;
  const repairSelect=$('crmRepairSelect'),storageSelect=$('crmStorageSelect');repairSelect.replaceChildren();storageSelect.replaceChildren();repairSelect.add(new Option('Без привязки',''));storageSelect.add(new Option('Без привязки',''));
@@ -660,7 +668,8 @@ async function refreshRepairs(){
   const worksBtn=document.createElement('button');worksBtn.type='button';worksBtn.textContent='Работы и стоимость';const workPanel=document.createElement('div');worksBtn.onclick=()=>showRepairWorks(item.id,workPanel);
   const addWork=document.createElement('button');addWork.type='button';addWork.textContent='Добавить работу';addWork.disabled=['issued','cancelled'].includes(item.status);addWork.onclick=()=>addRepairWork(item.id);
   const estimateBtn=document.createElement('button');estimateBtn.type='button';estimateBtn.textContent='Расчёт заказа';const estimate=document.createElement('div');estimateBtn.onclick=()=>showRepairStatement(item.id,estimate);
-  container.append(worksBtn,addWork,workPanel,estimateBtn,estimate);box.append(container)
+  const taskBtn=document.createElement('button');taskBtn.type='button';taskBtn.textContent='Поставить задачу по ремонту';taskBtn.onclick=()=>openCrmFor('repair',item.id);
+  container.append(worksBtn,addWork,workPanel,estimateBtn,estimate,taskBtn);box.append(container)
  }
 }
 $('reloadRepairs').onclick=()=>refreshRepairs().catch(e=>status(e.message));
