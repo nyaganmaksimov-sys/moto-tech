@@ -1304,3 +1304,16 @@ async def equipment_qr(asset_id:uuid.UUID,person=Depends(require_roles(*ROLES)),
     code=qrcode.make(target,image_factory=SvgPathImage,box_size=8,border=2)
     return {"inventory_number":asset["inventory_number"],"name":asset["name"],
             "url":target,"svg":code.to_string().decode("utf-8")}
+
+@app.get("/storage/{contract_id}/qr")
+async def storage_qr(contract_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    import qrcode
+    from qrcode.image.svg import SvgPathImage
+    async with db.acquire() as c:
+        record=await c.fetchrow("SELECT contract_number,brand_model,status FROM storage_contracts WHERE id=$1",contract_id)
+    if not record:raise HTTPException(404,"Договор хранения не найден")
+    if record["status"]=="draft":raise HTTPException(409,"QR выдаётся после подтверждения приёмки")
+    target="https://moto-tech-storage-test.onrender.com/?storage="+str(contract_id)
+    img=qrcode.make(target,image_factory=SvgPathImage,box_size=8,border=2)
+    return {"contract_number":record["contract_number"],"brand_model":record["brand_model"],
+            "url":target,"svg":img.to_string().decode("utf-8")}
