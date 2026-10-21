@@ -1317,3 +1317,38 @@ async def storage_qr(contract_id:uuid.UUID,person=Depends(require_roles(*ROLES))
     img=qrcode.make(target,image_factory=SvgPathImage,box_size=8,border=2)
     return {"contract_number":record["contract_number"],"brand_model":record["brand_model"],
             "url":target,"svg":img.to_string().decode("utf-8")}
+
+class TaskNew(BaseModel):
+    title: str = Field(min_length=2,max_length=250)
+    description: str = ""
+    assigned_to: uuid.UUID | None = None
+    priority: str = "normal"
+    due_at: datetime | None = None
+
+@app.get("/crm/tasks")
+async def crm_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        records=await c.fetch("SELECT * FROM crm_tasks WHERE assigned_to=$1 OR created_by=$1 ORDER BY due_at NULLS LAST LIMIT 300",person["id"])
+    return [dict(x) for x in records]
+
+@app.post("/crm/tasks",status_code=201)
+async def crm_add(payload:TaskNew,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    target=payload.assigned_to or person["id"]
+    if target!=person["id"] and person["role"] not in ("owner_manager","manager","administrator"):
+        raise HTTPException(403,"Недостаточно прав для назначения")
+    if payload.priority not in ("low","normal","high"):
+        raise HTTPException(422,"Приоритет не поддерживается")
+    async with db.acquire() as c:
+        return dict(await c.fetchrow("INSERT INTO crm_tasks(title,description,assigned_to,created_by,priority,due_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",payload.title,payload.description,target,person["id"],payload.priority,payload.due_at))
+
+class TaskState(BaseModel):
+    status: str
+
+@app.patch("/crm/tasks/{task_id}/status")
+async def crm_update(task_id:uuid.UUID,payload:TaskState,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    if payload.status not in ("open","in_progress","done","cancelled"):
+        raise HTTPException(422,"Статус не поддерживается")
+    async with db.acquire() as c:
+        row=await c.fetchrow("UPDATE crm_tasks SET status=$2,updated_at=now() WHERE id=$1 AND (assigned_to=$3 OR created_by=$3) RETURNING *",task_id,payload.status,person["id"])
+    if not row:raise HTTPException(404,"Задача не найдена")
+    return dict(row)
