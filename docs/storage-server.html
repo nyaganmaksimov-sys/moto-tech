@@ -315,7 +315,9 @@ function showCrmTasks(){
  const add=document.createElement('button');add.textContent='Добавить комментарий';add.onclick=async()=>{const body=prompt('Комментарий по задаче');if(!body)return;try{await request('/crm/tasks/'+t.id+'/comments',{method:'POST',body:{body}});comments.open=false;comments.open=true;status('Комментарий добавлен')}catch(err){status(err.message)}};comments.append(add);
  if(t.repair_id){const openRepair=document.createElement('button');openRepair.type='button';openRepair.textContent='Открыть заказ-наряд';openRepair.onclick=async()=>{switchSystem('repairs');await refreshRepairs();const target=document.getElementById('repair-'+t.repair_id);if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.style.outline='2px solid #f6ae35'}};link.append(openRepair)}
  if(t.storage_id){const openStorage=document.createElement('button');openStorage.type='button';openStorage.textContent='Открыть карточку хранения';openStorage.onclick=async()=>{switchSystem('storage');await openRecord(t.storage_id)};link.append(openStorage)}
- line.append(title,desc,due,state,link,comments);box.append(line)}
+ const historyPanel=document.createElement('details');const histCaption=document.createElement('summary');histCaption.textContent='История статусов';const histBody=document.createElement('div');historyPanel.append(histCaption,histBody);
+ historyPanel.ontoggle=async()=>{if(!historyPanel.open)return;try{const data=await request('/crm/tasks/'+t.id+'/history');histBody.replaceChildren();for(const ev of data){const p=document.createElement('p');p.textContent=new Date(ev.created_at).toLocaleString('ru-RU')+' · '+ev.actor_name+' · '+(ev.old_value||'—')+' → '+ev.new_value;histBody.append(p)}if(!data.length)histBody.textContent='Изменений статуса пока не было'}catch(err){histBody.textContent=err.message}};
+ line.append(title,desc,due,state,link,comments,historyPanel);box.append(line)}
 }
 $('crmFilterAssignee').onchange=showCrmTasks;
 $('crmFilterState').onchange=showCrmTasks;
