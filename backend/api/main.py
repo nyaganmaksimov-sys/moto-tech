@@ -1580,3 +1580,15 @@ async def crm_staff_performance(person=Depends(require_roles("owner_manager","ma
           FROM service_employees e LEFT JOIN crm_tasks t ON t.assigned_to=e.id
           WHERE e.active=true GROUP BY e.id,e.full_name,e.position ORDER BY e.full_name""")
     return [dict(r) for r in rows]
+
+@app.get("/repairs/{repair_id}/events")
+async def repair_event_history(repair_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        exists=await c.fetchval("SELECT EXISTS(SELECT 1 FROM repair_orders WHERE id=$1)",repair_id)
+        if not exists:raise HTTPException(404,"Заказ-наряд не найден")
+        rows=await c.fetch("""SELECT ev.id,ev.event_type,ev.payload,ev.happened_at,
+            coalesce(emp.full_name,'Система') AS actor_name
+            FROM repair_order_events ev
+            LEFT JOIN service_employees emp ON emp.id=ev.actor_id
+            WHERE ev.order_id=$1 ORDER BY ev.happened_at DESC LIMIT 250""",repair_id)
+    return [dict(r) for r in rows]
