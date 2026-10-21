@@ -247,5 +247,5 @@ function selectView(view){
  if(showList&&staff){void loadTab(view);void renderModuleForm(view)}
 }
 document.querySelectorAll('#sidebar [data-view]').forEach(b=>b.onclick=()=>selectView(b.dataset.view));$('refreshStaffNotifications').onclick=loadStaffNotifications;$('overviewAllOrders').onclick=()=>{window.motoOrderFilter=null;selectView('orders')};
-try{await refresh();if(staff){selectView('overview');$('sidebar').style.display='none'}else{location.replace('./login.html'+location.search)}}catch(e){msg('Ошибка авторизации: '+e.message);$('login').style.display='block';$('dashboard').style.display='none';$('sidebar').style.display='none'}
+try{await refresh();if(staff){selectView('overview');$('sidebar').style.display='none'}else{location.replace('./login.html?v=20261021b')}}catch(e){msg('Ошибка авторизации: '+e.message);$('login').style.display='block';$('dashboard').style.display='none';$('sidebar').style.display='none';$('loginLink').href='./login.html?v=20261021b'}
 </script></div></body></html>
