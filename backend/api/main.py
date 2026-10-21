@@ -1324,6 +1324,8 @@ class TaskNew(BaseModel):
     assigned_to: uuid.UUID | None = None
     priority: str = "normal"
     due_at: datetime | None = None
+    repair_id: uuid.UUID | None = None
+    storage_id: uuid.UUID | None = None
 
 @app.get("/crm/tasks")
 async def crm_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
@@ -1339,7 +1341,7 @@ async def crm_add(payload:TaskNew,person=Depends(require_roles(*ROLES)),db=Depen
     if payload.priority not in ("low","normal","high"):
         raise HTTPException(422,"Приоритет не поддерживается")
     async with db.acquire() as c:
-        return dict(await c.fetchrow("INSERT INTO crm_tasks(title,description,assigned_to,created_by,priority,due_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",payload.title,payload.description,target,person["id"],payload.priority,payload.due_at))
+        return dict(await c.fetchrow("INSERT INTO crm_tasks(title,description,assigned_to,created_by,priority,due_at,repair_id,storage_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",payload.title,payload.description,target,person["id"],payload.priority,payload.due_at,payload.repair_id,payload.storage_id))
 
 class TaskState(BaseModel):
     status: str
