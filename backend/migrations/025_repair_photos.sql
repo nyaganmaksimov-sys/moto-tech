@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS repair_photos (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), repair_id uuid NOT NULL REFERENCES repair_orders(id) ON DELETE CASCADE, kind text NOT NULL CHECK(kind IN ('front','rear','left','right','vin','damage','other')), note text NOT NULL DEFAULT '', object_key text NOT NULL, uploaded_by uuid NOT NULL REFERENCES service_employees(id), created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS repair_photos_order_idx ON repair_photos(repair_id,created_at);
