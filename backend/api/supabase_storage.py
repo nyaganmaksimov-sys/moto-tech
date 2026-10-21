@@ -60,3 +60,18 @@ def download_private_image(key: str) -> bytes:
         if len(response.content) > 12_582_912:
             raise ValueError("Downloaded photo exceeds limit")
         return response.content
+
+def upload_private_blob(data: bytes, filename: str, content_type: str) -> str:
+    """Upload an allowed CRM attachment to the existing private bucket."""
+    with httpx.Client(timeout=35) as client:
+        response = client.post(_base() + quote(filename, safe="/"), headers=_headers(content_type), content=data)
+        response.raise_for_status()
+    return "supabase:" + filename
+
+def download_private_blob(key: str, limit: int = 8_388_608) -> bytes:
+    with httpx.Client(timeout=30) as client:
+        response = client.get(_base() + _path(key), headers=_headers())
+        response.raise_for_status()
+        if len(response.content) > limit:
+            raise ValueError("Attachment exceeds limit")
+        return response.content
