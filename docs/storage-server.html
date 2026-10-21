@@ -311,7 +311,7 @@ function showCrmTasks(){
  const thread=document.createElement('div');comments.append(thread);
  comments.ontoggle=async()=>{if(!comments.open)return;try{const data=await request('/crm/tasks/'+t.id+'/comments');thread.replaceChildren();for(const msg of data){const p=document.createElement('p');p.textContent=new Date(msg.created_at).toLocaleString('ru-RU')+' · '+msg.body;thread.append(p)}if(!data.length)thread.textContent='Комментариев пока нет'}catch(err){thread.textContent=err.message}};
  const add=document.createElement('button');add.textContent='Добавить комментарий';add.onclick=async()=>{const body=prompt('Комментарий по задаче');if(!body)return;try{await request('/crm/tasks/'+t.id+'/comments',{method:'POST',body:{body}});comments.open=false;comments.open=true;status('Комментарий добавлен')}catch(err){status(err.message)}};comments.append(add);
- if(t.repair_id){const openRepair=document.createElement('button');openRepair.type='button';openRepair.textContent='Открыть заказ-наряд';openRepair.onclick=()=>switchSystem('repairs');link.append(openRepair)}
+ if(t.repair_id){const openRepair=document.createElement('button');openRepair.type='button';openRepair.textContent='Открыть заказ-наряд';openRepair.onclick=async()=>{switchSystem('repairs');await refreshRepairs();const target=document.getElementById('repair-'+t.repair_id);if(target){target.scrollIntoView({behavior:'smooth',block:'center'});target.style.outline='2px solid #f6ae35'}};link.append(openRepair)}
  if(t.storage_id){const openStorage=document.createElement('button');openStorage.type='button';openStorage.textContent='Открыть карточку хранения';openStorage.onclick=async()=>{switchSystem('storage');await openRecord(t.storage_id)};link.append(openStorage)}
  line.append(title,desc,due,state,link,comments);box.append(line)}
 }
@@ -645,7 +645,7 @@ async function refreshRepairs(){
  const box=$('repairItems');box.replaceChildren();
  if(!orders.length){box.textContent='Заказов пока нет';return}
  for(const item of orders){
-  const container=document.createElement('div');container.style.padding='10px 0';container.style.borderBottom='1px solid #394352';
+  const container=document.createElement('div');container.id='repair-'+item.id;container.style.padding='10px 0';container.style.borderBottom='1px solid #394352';
   const heading=document.createElement('div');heading.textContent=item.order_number+' · '+item.brand+' '+item.model+' · '+item.client_name;
   const detail=document.createElement('small');detail.textContent=repairStatusRu[item.status]||item.status;
   const select=document.createElement('select');select.style.marginTop='8px';select.setAttribute('aria-label','Изменить статус '+item.order_number);
