@@ -106,6 +106,10 @@ class Status(BaseModel):
 def home():
     return FileResponse(ROOT / "static" / "index.html")
 
+@app.get("/intake")
+def intake_page():
+    return FileResponse(ROOT / "static" / "intake.html")
+
 @app.get("/api/customers")
 def customers():
     with db() as c: return rows(c, "SELECT * FROM customers ORDER BY id DESC")
