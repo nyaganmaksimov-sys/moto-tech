@@ -1614,3 +1614,56 @@ async def update_repair_inspection(repair_id:uuid.UUID,payload:RepairInspectionU
                 payload.fuel_level,payload.mileage_km,person["id"])
             await c.execute("INSERT INTO repair_order_events(order_id,actor_id,event_type) VALUES($1,$2,'inspection_updated')",repair_id,person["id"])
     return dict(row)
+
+@app.get("/repairs/{repair_id}/photos")
+async def list_repair_photos(repair_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        if not await c.fetchval("SELECT EXISTS(SELECT 1 FROM repair_orders WHERE id=$1)",repair_id):raise HTTPException(404,"Заказ не найден")
+        rows=await c.fetch("SELECT id,kind,note,created_at FROM repair_photos WHERE repair_id=$1 ORDER BY created_at",repair_id)
+    return [dict(x) for x in rows]
+
+@app.post("/repairs/{repair_id}/photos",status_code=201)
+async def add_repair_photo(repair_id:uuid.UUID,kind:str=Form(...),note:str=Form(""),photo:UploadFile=File(...),person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    if kind not in ("front","rear","left","right","vin","damage","other"):raise HTTPException(422,"Неверная категория")
+    if kind=="damage" and not note.strip():raise HTTPException(422,"Опишите повреждение")
+    if len(note)>2000:raise HTTPException(422,"Слишком длинное описание")
+    if not supabase_storage.configured():raise HTTPException(503,"Хранилище недоступно")
+    async with db.acquire() as c:
+        state=await c.fetchval("SELECT status FROM repair_orders WHERE id=$1",repair_id)
+    if state is None:raise HTTPException(404,"Заказ не найден")
+    if state in ("issued","cancelled"):raise HTTPException(409,"Заказ закрыт")
+    raw=await photo.read(MAX_IMAGE_BYTES+1)
+    await photo.close()
+    if not raw or len(raw)>MAX_IMAGE_BYTES:raise HTTPException(413,"Файл превышает лимит")
+    try:
+        with Image.open(io.BytesIO(raw)) as source:
+            source.verify()
+        with Image.open(io.BytesIO(raw)) as source:
+            source.load()
+            if source.width*source.height>35_000_000:raise HTTPException(413,"Слишком большое изображение")
+            converted=source.convert("RGB");buf=io.BytesIO();converted.save(buf,format="JPEG",quality=88,optimize=True);data=buf.getvalue()
+    except (UnidentifiedImageError,OSError,ValueError,Image.DecompressionBombError):
+        raise HTTPException(422,"Некорректное изображение")
+    photo_id=uuid.uuid4()
+    try:key=await run_in_threadpool(supabase_storage.upload_private_image,data,"repairs/"+str(repair_id)+"/"+str(photo_id)+".jpg")
+    except Exception:raise HTTPException(502,"Ошибка загрузки")
+    try:
+        async with db.acquire() as c:
+            async with c.transaction():
+                status_now=await c.fetchval("SELECT status FROM repair_orders WHERE id=$1 FOR UPDATE",repair_id)
+                if status_now is None or status_now in ("issued","cancelled"):raise HTTPException(409,"Заказ закрыт")
+                await c.execute("INSERT INTO repair_photos(id,repair_id,kind,note,object_key,uploaded_by) VALUES($1,$2,$3,$4,$5,$6)",photo_id,repair_id,kind,note.strip(),key,person["id"])
+    except Exception:
+        try:await run_in_threadpool(supabase_storage.remove_private_image,key)
+        except Exception:pass
+        raise
+    return {"id":photo_id,"kind":kind}
+
+@app.get("/repairs/{repair_id}/photos/{photo_id}")
+async def get_repair_photo(repair_id:uuid.UUID,photo_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        key=await c.fetchval("SELECT object_key FROM repair_photos WHERE id=$1 AND repair_id=$2",photo_id,repair_id)
+    if not key:raise HTTPException(404,"Фото не найдено")
+    try:data=await run_in_threadpool(supabase_storage.download_private_image,key)
+    except Exception:raise HTTPException(502,"Ошибка получения фото")
+    return Response(content=data,media_type="image/jpeg",headers={"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
