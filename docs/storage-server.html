@@ -153,7 +153,7 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <p><button class="primary" type="submit">Сохранить черновик</button></p></form></div></div>
 </section>
 <section class="card hidden" id="detail">
-<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p><div id="detailsGrid" class="info-grid"></div><details id="editCard"><summary>Редактировать карточку (управляющий)</summary><form id="editCardForm"><div id="editInputs"></div><button type="submit" class="primary">Сохранить изменения</button></form></details><div class="doc-actions"><button type="button" onclick="printStoragePaper('intake')">Печать акта приёмки</button><button type="button" onclick="printStoragePaper('agreement')">Договор хранения (проект)</button><button type="button" onclick="printStoragePaper('return')">Акт выдачи</button></div>
+<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p><button id="storageQrButton" type="button" class="primary hidden">Печать QR-наклейки</button><div id="detailsGrid" class="info-grid"></div><details id="editCard"><summary>Редактировать карточку (управляющий)</summary><form id="editCardForm"><div id="editInputs"></div><button type="submit" class="primary">Сохранить изменения</button></form></details><div class="doc-actions"><button type="button" onclick="printStoragePaper('intake')">Печать акта приёмки</button><button type="button" onclick="printStoragePaper('agreement')">Договор хранения (проект)</button><button type="button" onclick="printStoragePaper('return')">Акт выдачи</button></div>
 <p>Для приёмки нужны фото: спереди, сзади, слева, справа и VIN. Повреждения снимайте отдельно.</p>
 <form id="upload"><div class="row"><div><label>Тип фотографии</label><select name="kind"><option value="front">Спереди</option><option value="rear">Сзади</option><option value="left">Слева</option><option value="right">Справа</option><option value="vin">VIN</option><option value="dashboard">Приборная панель</option><option value="damage">Повреждение</option><option value="pts">ПТС</option><option value="other">Другое</option></select></div>
 <div><label>Описание / место повреждения</label><input name="note" maxlength="2000"></div><div><label>Фото</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></div></div>
@@ -470,6 +470,10 @@ async function enterWorkspace(me){
  staffRole=me.role;staffId=me.id;authProfile=me;
  $('profile').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':me.role);
  await refresh();setSignedIn(true);$('staffMini').textContent=me.full_name+' · '+(me.role==='owner_manager'?'Руководитель':'Сотрудник');switchSystem('full');$('headerSub').textContent='Рабочая система';
+ const pending=new URLSearchParams(location.search).get('storage');
+ if(pending&&/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(pending)){
+  switchSystem('storage');await openRecord(pending);history.replaceState(null,'',location.pathname);
+ }
  $('pinSettings').textContent=loadPinDevice()?'Изменить PIN':'Настроить PIN';
  status('Вы вошли в систему.');
 }
@@ -690,11 +694,26 @@ function clearPhotoUrls(){
  for(const url of photoBlobUrls)URL.revokeObjectURL(url);
  photoBlobUrls.clear();
 }
+async function printStorageQR(){
+ if(!current||current.status==='draft')return;
+ try{
+  const data=await request('/storage/'+current.id+'/qr');const win=window.open('','_blank');
+  if(!win){status('Разрешите всплывающие окна для печати');return}
+  const h=win.document.createElement('h2');h.textContent='MOTO TECH · ХРАНЕНИЕ';
+  const contract=win.document.createElement('p');contract.textContent='Договор '+data.contract_number;
+  const motorcycle=win.document.createElement('p');motorcycle.textContent=data.brand_model;
+  const qr=win.document.createElement('img');qr.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(data.svg);qr.width=210;qr.height=210;
+  const label=win.document.createElement('small');label.textContent='Сканируйте QR для открытия карточки в MOTO TECH (требуется вход)';
+  win.document.body.append(h,contract,motorcycle,qr,label);qr.onload=()=>win.print()
+ }catch(err){status(err.message)}
+}
+$('storageQrButton').onclick=printStorageQR;
 async function openRecord(id){
  try{
   current=await request('/storage/'+encodeURIComponent(id));$('detail').classList.remove('hidden');
   $('detailName').textContent='Договор '+current.contract_number+' · '+current.brand_model;
   $('detailMeta').textContent=(statusRu[current.status]||current.status)+' · VIN '+current.vin+' · версия '+current.version;
+  $('storageQrButton').classList.toggle('hidden',current.status==='draft');
   renderDetailGrid();renderEditForm();
   clearPhotoUrls();$('photos').replaceChildren();
   const detailId=current.id;
