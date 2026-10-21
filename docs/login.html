@@ -4,6 +4,7 @@
 import{createClient}from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 const db=createClient('https://kjgalcvxxjnapcaocvry.supabase.co','sb_publishable_D_l6wPXXDiAZJZZcgHL3VQ_6yR0iKeK');
 const $=id=>document.getElementById(id);
+const existing=await db.auth.getSession();if(existing.data?.session){location.replace('./cloud.html'+location.search)}
 $('reveal').onclick=()=>{const input=$('password');input.type=input.type==='password'?'text':'password';$('reveal').textContent=input.type==='password'?'Показать':'Скрыть'};
 $('form').addEventListener('submit',async e=>{e.preventDefault();const button=$('submit');button.disabled=true;$('error').textContent='';try{const login=$('login').value.trim().toLowerCase();if(!/^[a-z0-9_-]{3,32}$/.test(login))throw new Error('Логин содержит недопустимые символы');const email=login+'@staff.moto-tech.example';const auth=await db.auth.signInWithPassword({email,password:$('password').value});if(auth.error)throw new Error('Неверный логин или пароль либо аккаунт ещё не активирован');const params=new URLSearchParams(location.search);const forwarded=new URLSearchParams();for(const key of ['vehicle','order','storage']){const value=params.get(key);if(/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(value||''))forwarded.set(key,value)}location.href='./cloud.html'+(forwarded.size?'?'+forwarded.toString():'')}catch(err){$('error').textContent=err instanceof TypeError?'Сервер входа пока недоступен. Регистрация аккаунтов ещё не завершена.':err.message}finally{button.disabled=false}});
 </script></body></html>
