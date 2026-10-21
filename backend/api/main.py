@@ -1375,3 +1375,13 @@ async def add_crm_comment(task_id:uuid.UUID,payload:CrmComment,person=Depends(re
         if person["role"]=="mechanic" and person["id"] not in (task["assigned_to"],task["created_by"]):
             raise HTTPException(403,"Нет доступа")
         return dict(await c.fetchrow("INSERT INTO crm_task_comments(task_id,author_id,body) VALUES($1,$2,$3) RETURNING *",task_id,person["id"],payload.body.strip()))
+
+@app.get("/crm/alerts")
+async def crm_alerts(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        records=await c.fetch("""SELECT id,title,status,due_at,created_at,
+          due_at IS NOT NULL AND due_at<now() AS overdue
+          FROM crm_tasks WHERE assigned_to=$1 AND status IN ('open','in_progress')
+          ORDER BY due_at NULLS LAST,created_at DESC LIMIT 50""",person["id"])
+    return {"total":len(records),"overdue":sum(bool(x["overdue"]) for x in records),
+            "tasks":[dict(r) for r in records]}
