@@ -102,7 +102,7 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <div id="fullSystem" class="hidden">
  <div class="server-dashboard">
   <div class="row"><div><h2>Панель управления</h2><p class="muted">Рабочие данные PostgreSQL · MOTO TECH</p></div><button type="button" id="reloadRepairs">Обновить данные</button></div>
-  <div class="metrics"><div class="metric">Всего заказов<strong id="ordersCount">—</strong></div><div class="metric">В работе<strong id="repairCount">—</strong></div><div class="metric">На хранении<strong id="storageCount">—</strong></div></div><section id="homeOrderCard" class="card"><div class="row"><h3>Последние заказ-наряды</h3><button type="button" id="allRepairs">Все заказы →</button></div><div id="homeOrders"></div></section>
+  <div class="metrics"><div class="metric">Всего заказов<strong id="ordersCount">—</strong></div><div class="metric">В работе<strong id="repairCount">—</strong></div><div class="metric">На хранении<strong id="storageCount">—</strong></div></div><section id="homeReviewCard" class="card hidden"><div class="row"><h3>Ожидают моего подтверждения <span id="homeReviewCount"></span></h3><button type="button" id="homeReviewOpen">Открыть в CRM →</button></div><div id="homeReviewItems"></div></section><section id="homeOrderCard" class="card"><div class="row"><h3>Последние заказ-наряды</h3><button type="button" id="allRepairs">Все заказы →</button></div><div id="homeOrders"></div></section>
   <div class="row dashboard-content" id="repairDashboardContent">
     <section class="card"><h3>Ремонтные заказ-наряды</h3><div id="repairItems" class="items"></div></section>
     <section class="card"><h3>Новый заказ-наряд</h3><form id="repairCreate">
@@ -184,6 +184,8 @@ function switchSystem(view){
  $('fullSystem').classList.toggle('hidden',!(home||repairs));
  $('repairDashboardContent').classList.toggle('hidden',home);
  $('homeOrderCard').classList.toggle('hidden',!home);
+ $('homeReviewCard').classList.toggle('hidden',!home||!['owner_manager','manager','administrator'].includes(staffRole));
+ if(home&&['owner_manager','manager','administrator'].includes(staffRole))refreshHomeReviews().catch(e=>status(e.message));
  $('workspace').classList.toggle('hidden',!storage);
  $('detail').classList.toggle('hidden',!storage||!current);
  $('employeesScreen').classList.toggle('hidden',!employees);
@@ -293,6 +295,17 @@ async function refreshProcurement(){
 $('supplierCreate').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;try{await request('/suppliers',{method:'POST',body:Object.fromEntries(new FormData(form).entries())});form.reset();await refreshProcurement();status('Поставщик сохранён')}catch(err){status(err.message)}};
 $('partsRequestCreate').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;try{const data=Object.fromEntries(new FormData(form).entries());data.supplier_id=data.supplier_id||null;data.repair_id=data.repair_id||null;data.quantity=Number(data.quantity);await request('/parts-requests',{method:'POST',body:data});form.reset();await refreshProcurement();status('Заявка сохранена')}catch(err){status(err.message)}};
 let crmCachedTasks=[];
+async function refreshHomeReviews(){
+ const tasks=await request('/crm/tasks');const pending=tasks.filter(t=>t.status==='review'&&t.assigned_to!==staffId);
+ $('homeReviewCount').textContent='('+pending.length+')';const box=$('homeReviewItems');box.replaceChildren();
+ if(!pending.length){box.textContent='Нет задач, ожидающих проверки';return}
+ for(const task of pending.slice(0,12)){
+  const line=document.createElement('div');line.style.cssText='padding:10px;border-bottom:1px solid #394352';
+  const name=document.createElement('strong');name.textContent=task.title+' · '+(task.assignee_name||'Сотрудник');line.append(name);
+  const btn=document.createElement('button');btn.textContent='Проверить';btn.onclick=async()=>{switchSystem('crm');await refreshCrm();$('crmFilterState').value='review';showCrmTasks();$('crmItems').scrollIntoView({behavior:'smooth',block:'start'})};line.append(btn);box.append(line)
+ }
+}
+$('homeReviewOpen').onclick=async()=>{switchSystem('crm');await refreshCrm();$('crmFilterState').value='review';showCrmTasks()};
 function showCrmTasks(){
  const tasks=crmCachedTasks,employee=$('crmFilterAssignee').value,st=$('crmFilterState').value,overdue=$('crmFilterOverdue').checked,now=Date.now();
  const isLate=t=>t.due_at&&new Date(t.due_at).getTime()<now&&!['done','cancelled'].includes(t.status);
