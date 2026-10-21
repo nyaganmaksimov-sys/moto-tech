@@ -1,4 +1,7 @@
 import os
+import base64
+import binascii
+import uuid
 import sqlite3
 from contextlib import contextmanager
 from decimal import Decimal, ROUND_HALF_UP
@@ -9,6 +12,9 @@ from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).parent
 DB = Path(os.environ.get("MOTO_DB", str(ROOT / "moto.db")))
+PHOTO_DIR = Path(os.environ.get("MOTO_PHOTOS_DIR", str(ROOT / "intake_photos"))).resolve()
+MAX_PHOTO_BYTES = 8 * 1024 * 1024
+REQUIRED_ANGLES = ("front", "rear", "left", "right")
 app = FastAPI(title="MOTO TECH Service", version="0.1.0")
 
 @contextmanager
@@ -36,6 +42,8 @@ def initialize():
         CREATE TABLE IF NOT EXISTS order_items(id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id), kind TEXT NOT NULL, description TEXT NOT NULL, qty TEXT NOT NULL, price_kopecks INTEGER NOT NULL, cost_kopecks INTEGER NOT NULL DEFAULT 0, approved INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id), amount_kopecks INTEGER NOT NULL CHECK(amount_kopecks > 0), method TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id), action TEXT NOT NULL, at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS intakes(id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id), vehicle_id INTEGER NOT NULL REFERENCES vehicles(id), purpose TEXT NOT NULL CHECK(purpose IN (\'repair\',\'storage\')), condition_notes TEXT NOT NULL DEFAULT \'\', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS intake_photos(id INTEGER PRIMARY KEY, intake_id INTEGER NOT NULL REFERENCES intakes(id), angle TEXT NOT NULL, filename TEXT NOT NULL UNIQUE);
         """)
         if c.execute("SELECT COUNT(*) FROM services").fetchone()[0] == 0:
             c.executemany("INSERT INTO services(category,name,price_kopecks) VALUES(?,?,?)", [
@@ -203,3 +211,90 @@ def dashboard():
         counts=rows(c,"SELECT status,COUNT(*) count FROM orders GROUP BY status")
         income=c.execute("SELECT COALESCE(SUM(amount_kopecks),0) FROM payments").fetchone()[0]
         return {"statuses":counts,"payments_kopecks":income,"total_orders":c.execute("SELECT COUNT(*) FROM orders").fetchone()[0]}
+
+
+# Приёмка: VIN всегда необязательный. Четыре ракурса обязательны для ремонта и хранения.
+class IntakePhoto(BaseModel):
+    angle: str
+    data: str  # base64 JPEG/PNG без data URI
+
+class Intake(BaseModel):
+    customer_id: int
+    vehicle_id: int
+    purpose: str = Field(pattern="^(repair|storage)$")
+    condition_notes: str = ""
+    photos: list[IntakePhoto] = Field(min_length=4, max_length=20)
+
+def decode_photo(encoded: str):
+    if len(encoded) > (MAX_PHOTO_BYTES * 4 // 3) + 16:
+        raise HTTPException(413, "Фото превышает 8 МБ")
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error):
+        raise HTTPException(422, "Неверный формат фотографии")
+    if not raw or len(raw) > MAX_PHOTO_BYTES:
+        raise HTTPException(413, "Фото пустое или превышает 8 МБ")
+    if raw.startswith(b"\\xff\\xd8\\xff") and raw.endswith(b"\\xff\\xd9"):
+        return raw, ".jpg"
+    if raw.startswith(b"\\x89PNG\\r\\n\\x1a\\n") and b"IEND" in raw[-20:]:
+        return raw, ".png"
+    raise HTTPException(422, "Допускаются только JPEG и PNG")
+
+@app.post("/api/intakes", status_code=201)
+def create_intake(x: Intake):
+    angles = [p.angle for p in x.photos]
+    if any(angles.count(a) != 1 for a in REQUIRED_ANGLES):
+        raise HTTPException(422, "Нужны ровно четыре обязательных фото: спереди, сзади, слева, справа")
+    if any(a not in (*REQUIRED_ANGLES, "damage", "pts", "other") for a in angles):
+        raise HTTPException(422, "Неизвестный ракурс")
+    decoded = [(p.angle, *decode_photo(p.data)) for p in x.photos]
+    PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+    created = []
+    try:
+        with db() as c:
+            if not c.execute("SELECT id FROM vehicles WHERE id=? AND customer_id=?", (x.vehicle_id, x.customer_id)).fetchone():
+                raise HTTPException(400, "Техника не принадлежит клиенту")
+            cur = c.execute("INSERT INTO intakes(customer_id,vehicle_id,purpose,condition_notes) VALUES(?,?,?,?)",
+                            (x.customer_id, x.vehicle_id, x.purpose, x.condition_notes))
+            intake_id = cur.lastrowid
+            for angle, raw, ext in decoded:
+                filename = uuid.uuid4().hex + ext
+                dest = PHOTO_DIR / filename
+                with dest.open("xb") as f:
+                    f.write(raw)
+                created.append(dest)
+                c.execute("INSERT INTO intake_photos(intake_id,angle,filename) VALUES(?,?,?)",
+                          (intake_id, angle, filename))
+            return {"id": intake_id, "number": f"MT-IN-{intake_id:06d}", "photo_count": len(decoded)}
+    except Exception:
+        for path in created:
+            path.unlink(missing_ok=True)
+        raise
+
+@app.get("/api/intakes")
+def list_intakes():
+    with db() as c:
+        return rows(c, """SELECT i.*,cu.name AS customer_name,v.kind,v.brand,v.model,v.vin,
+                       (SELECT COUNT(*) FROM intake_photos p WHERE p.intake_id=i.id) AS photo_count
+                       FROM intakes i JOIN customers cu ON cu.id=i.customer_id
+                       JOIN vehicles v ON v.id=i.vehicle_id ORDER BY i.id DESC""")
+
+@app.get("/api/intakes/{intake_id}")
+def get_intake(intake_id: int):
+    with db() as c:
+        intake = c.execute("SELECT * FROM intakes WHERE id=?", (intake_id,)).fetchone()
+        if not intake:
+            raise HTTPException(404, "Приёмка не найдена")
+        photos = rows(c, "SELECT id,angle FROM intake_photos WHERE intake_id=? ORDER BY id", (intake_id,))
+        return {"intake": dict(intake), "photos": photos}
+
+@app.get("/api/intakes/{intake_id}/photos/{photo_id}")
+def get_intake_photo(intake_id: int, photo_id: int):
+    with db() as c:
+        row = c.execute("SELECT filename FROM intake_photos WHERE id=? AND intake_id=?", (photo_id,intake_id)).fetchone()
+        if not row:
+            raise HTTPException(404, "Фото не найдено")
+        path = PHOTO_DIR / row["filename"]
+        if not path.is_file():
+            raise HTTPException(404, "Файл фото не найден")
+        return FileResponse(path, media_type="image/png" if path.suffix == ".png" else "image/jpeg")
