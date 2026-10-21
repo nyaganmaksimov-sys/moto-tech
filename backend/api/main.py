@@ -1303,4 +1303,4 @@ async def equipment_qr(asset_id:uuid.UUID,person=Depends(require_roles(*ROLES)),
     target="https://moto-tech-storage-test.onrender.com/?equipment="+str(asset_id)
     code=qrcode.make(target,image_factory=SvgPathImage,box_size=8,border=2)
     return {"inventory_number":asset["inventory_number"],"name":asset["name"],
-            "url":target,"svg":code.to_string(encoding="unicode")}
+            "url":target,"svg":code.to_string().decode("utf-8")}
