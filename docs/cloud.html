@@ -100,6 +100,21 @@ async function printRepairDocument(order,kind){
  popup.focus();popup.print();
  }catch(error){popup.close();msg('Не удалось сформировать документ: '+error.message)}
 }
+async function showIntakeEditor(table,r,panel){
+ if(!r.vehicle_id||!r.customer_id)return;
+ const vehicle=await db.from('vehicles').select('brand,model,vin,plate,year,mileage').eq('id',r.vehicle_id).maybeSingle();
+ const customer=await db.from('customers').select('full_name,phone').eq('id',r.customer_id).maybeSingle();
+ if(vehicle.error||customer.error||!vehicle.data||!customer.data){msg('Не удалось загрузить данные приёмки');return}
+ const form=document.createElement('form');form.className='card';form.style.marginTop='14px';
+ form.append(elt('h3','Редактирование приёмки'));
+ const inputs={};const rows=[['customer_name','ФИО клиента',customer.data.full_name],['phone','Телефон',customer.data.phone],['brand','Марка',vehicle.data.brand],['model','Модель',vehicle.data.model],['vin','VIN / номер рамы',vehicle.data.vin],['plate','Госномер',vehicle.data.plate],['year','Год',vehicle.data.year],['mileage','Пробег, км',vehicle.data.mileage]];
+ if(table==='orders')rows.push(['complaint','Жалоба / замечания',r.complaint]);
+ else rows.push(['start_date','Начало хранения',r.start_date]);
+ for(const [key,label,value] of rows){const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.value=value??'';input.maxLength=key==='complaint'?2000:150;if(['year','mileage'].includes(key)){input.type='number';input.min='0'}if(key==='start_date')input.type='date';if(['customer_name','phone','brand','model'].includes(key))input.required=true;if(key==='start_date'&&staff.role==='mechanic')input.disabled=true;wrap.append(input);form.append(wrap);inputs[key]=input}
+ const buttons=document.createElement('div');buttons.className='row';const save=elt('button','Сохранить изменения');save.type='submit';const cancel=elt('button','Отмена');cancel.type='button';cancel.className='secondary';cancel.onclick=()=>form.remove();buttons.append(save,cancel);form.append(buttons);
+ form.onsubmit=async event=>{event.preventDefault();if(save.disabled)return;const values={};for(const [key,input] of Object.entries(inputs))if(!input.disabled)values[key]=input.value.trim();if(!await confirmActionPin())return;save.disabled=true;try{const result=await db.rpc('edit_intake_details',{p_kind:table==='orders'?'repair':'storage',p_record:r.id,p_fields:values});if(result.error)throw result.error;msg('Данные приёмки обновлены');await openRecord(table,r.id);await loadTab(table)}catch(err){msg('Ошибка редактирования: '+err.message);save.disabled=false}};
+ panel.append(form);form.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
 async function openRecord(table,id){
 if(!['orders','storage_records'].includes(table)||!validRecord(id))return;
 const panel=showDetailPanel();panel.replaceChildren(elt('h2','Загрузка записи…'));
@@ -108,7 +123,9 @@ try{
  if(result.error)throw result.error;const r=result.data;
  panel.replaceChildren(elt('h2',(table==='orders'?'Заказ-наряд ':'Договор хранения ')+(r.order_number||r.contract_number||'')));
  const details=table==='orders'?['Статус: '+r.status,'Жалоба: '+(r.complaint||'—'),...(staff.role==='mechanic'?[]:['Сумма: '+Number(r.amount||0).toLocaleString('ru-RU')+' ₽'])]:['Статус: '+r.status,'Начало хранения: '+(r.start_date||'—'),'Возврат: '+(r.return_date||'—'),...(staff.role==='mechanic'?[]:['Тариф: '+Number(r.monthly_rate||0).toLocaleString('ru-RU')+' ₽'])];
- for(const line of details)panel.append(elt('p',line,'muted'));if(table==='orders'&&r.mechanic_id){const mechanic=await db.from('staff').select('full_name').eq('id',r.mechanic_id).maybeSingle();panel.append(elt('p','Ответственный механик: '+(mechanic.data?.full_name||'не найден'),'muted'))}
+ for(const line of details)panel.append(elt('p',line,'muted'));
+ if(!['Выдан','Отклонён','Завершено','Возвращён'].includes(r.status)&&!r.deleted_at){const intakeEdit=elt('button','Редактировать приёмку');intakeEdit.type='button';intakeEdit.onclick=()=>showIntakeEditor(table,r,panel);panel.append(intakeEdit)}
+if(table==='orders'&&r.mechanic_id){const mechanic=await db.from('staff').select('full_name').eq('id',r.mechanic_id).maybeSingle();panel.append(elt('p','Ответственный механик: '+(mechanic.data?.full_name||'не найден'),'muted'))}
  if(table==='orders'&&r.status!=='Выдан'&&!r.deleted_at){
  const edit=elt('button','Редактировать заявку');edit.type='button';edit.onclick=async()=>{const newText=prompt('Изменить описание заявки '+r.order_number,r.complaint||'');if(newText===null)return;if(newText.trim().length<3)return msg('Укажите описание от 3 символов');if(!await confirmActionPin())return;edit.disabled=true;try{const res=await db.rpc('update_repair_request',{p_order:id,p_complaint:newText.trim()});if(res.error)throw res.error;msg('Изменения заявки сохранены');await openRecord('orders',id);await loadTab('orders')}catch(error){msg('Ошибка изменения: '+error.message);edit.disabled=false}};panel.append(edit);
  if(['owner_manager','manager','administrator'].includes(staff.role)){const del=elt('button','Удалить ошибочную заявку');del.type='button';del.className='secondary';del.onclick=async()=>{const reason=prompt('Причина удаления (от 5 символов)');if(reason===null)return;if(reason.trim().length<5)return msg('Укажите причину');if(!confirm('Удалить заявку '+r.order_number+' из рабочих списков? История сохранится.'))return;if(!await confirmActionPin())return;del.disabled=true;const res=await db.rpc('admin_archive_bad_order',{p_order:id,p_reason:reason.trim()});if(res.error){msg(res.error.message);del.disabled=false}else{$('vehicleOverlay').style.display='none';msg('Заявка архивирована');selectView('orders')}};panel.append(del)}
