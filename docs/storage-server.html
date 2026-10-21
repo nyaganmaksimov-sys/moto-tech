@@ -804,7 +804,7 @@ $('create').onsubmit=async e=>{
  const item=await request('/storage',{method:'POST',body:data});e.target.reset();await refresh();await openRecord(item.id);status('Черновик создан. Добавьте фотографии, затем подтвердите приёмку.');
  }catch(err){status(err.message)}
 };
-const required=['front','rear','left','right','vin'];
+const required=['front','rear','left','right'];
 function renderDetailGrid(){
  const fields=[['Номер договора',current.contract_number],['Владелец',current.owner_name],['Телефон',current.owner_phone],['Мотоцикл',current.brand_model],['VIN / номер рамы',current.vin],['Госномер',current.plate],['Место хранения',current.location_label],['Тариф в месяц',current.monthly_rate_rub == null?'':current.monthly_rate_rub+' ₽'],['Состояние при приёмке',current.body_condition],['Повреждения',current.damage_description],['Дата приёмки',current.received_at?new Date(current.received_at).toLocaleString('ru-RU'):'Не завершена'],['Дата выдачи',current.returned_at?new Date(current.returned_at).toLocaleString('ru-RU'):'Не выдан']];
  const grid=$('detailsGrid');grid.replaceChildren();
