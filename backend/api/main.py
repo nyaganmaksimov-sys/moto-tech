@@ -1467,3 +1467,63 @@ async def crm_event_read(event_id:uuid.UUID,person=Depends(require_roles(*ROLES)
         row=await c.fetchrow("UPDATE crm_event_notifications SET read_at=coalesce(read_at,now()) WHERE id=$1 AND recipient_id=$2 RETURNING id",event_id,person["id"])
     if not row:raise HTTPException(404,"Уведомление не найдено")
     return {"ok":True}
+
+CRM_ALLOWED_MIME = {"image/jpeg":".jpg","image/png":".png","image/webp":".webp","application/pdf":".pdf"}
+CRM_MAX_BYTES = 8_388_608
+
+async def crm_assert_task_access(c,task_id,person):
+    task=await c.fetchrow("SELECT assigned_to,created_by FROM crm_tasks WHERE id=$1",task_id)
+    if not task:raise HTTPException(404,"Задача не найдена")
+    if person["role"] not in ("owner_manager","manager","administrator") and person["id"] not in (task["assigned_to"],task["created_by"]):
+        raise HTTPException(403,"Нет доступа к задаче")
+    return task
+
+@app.get("/crm/tasks/{task_id}/attachments")
+async def crm_attachment_list(task_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        await crm_assert_task_access(c,task_id,person)
+        rows=await c.fetch("SELECT id,original_name,content_type,size_bytes,created_at FROM crm_task_attachments WHERE task_id=$1 ORDER BY created_at DESC",task_id)
+    return [dict(r) for r in rows]
+
+@app.post("/crm/tasks/{task_id}/attachments",status_code=201)
+async def crm_attachment_upload(task_id:uuid.UUID,attachment:UploadFile=File(...),person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    mime=attachment.content_type
+    if mime not in CRM_ALLOWED_MIME:raise HTTPException(422,"Разрешены JPG, PNG, WEBP и PDF")
+    if not supabase_storage.configured():raise HTTPException(503,"Хранилище файлов недоступно")
+    data=await attachment.read(CRM_MAX_BYTES+1)
+    if not data or len(data)>CRM_MAX_BYTES:raise HTTPException(413,"Размер файла должен быть от 1 байта до 8 МБ")
+    if mime=="application/pdf" and not data.startswith(b"%PDF-"):raise HTTPException(422,"Некорректный PDF")
+    if mime.startswith("image/"):
+        try:
+            img=Image.open(io.BytesIO(data))
+            img.verify()
+        except (UnidentifiedImageError,OSError,ValueError):
+            raise HTTPException(422,"Некорректное изображение")
+    name=(attachment.filename or "file").replace("\\","/").split("/")[-1][:180]
+    object_name="crm/"+str(task_id)+"/"+str(uuid.uuid4())+CRM_ALLOWED_MIME[mime]
+    async with db.acquire() as c:
+        await crm_assert_task_access(c,task_id,person)
+    try:
+        key=await run_in_threadpool(supabase_storage.upload_private_blob,data,object_name,mime)
+    except Exception:raise HTTPException(502,"Не удалось сохранить файл")
+    try:
+        async with db.acquire() as c:
+            await crm_assert_task_access(c,task_id,person)
+            row=await c.fetchrow("INSERT INTO crm_task_attachments(task_id,uploaded_by,original_name,content_type,size_bytes,object_key) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,original_name,content_type,size_bytes,created_at",task_id,person["id"],name,mime,len(data),key)
+        return dict(row)
+    except Exception:
+        try:await run_in_threadpool(supabase_storage.remove_private_image,key)
+        except Exception:pass
+        raise
+
+@app.get("/crm/tasks/{task_id}/attachments/{attachment_id}")
+async def crm_attachment_download(task_id:uuid.UUID,attachment_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        await crm_assert_task_access(c,task_id,person)
+        row=await c.fetchrow("SELECT object_key,original_name,content_type FROM crm_task_attachments WHERE id=$1 AND task_id=$2",attachment_id,task_id)
+    if not row:raise HTTPException(404,"Файл не найден")
+    try:data=await run_in_threadpool(supabase_storage.download_private_blob,row["object_key"])
+    except Exception:raise HTTPException(502,"Не удалось получить файл")
+    from urllib.parse import quote
+    filename=quote(row["original_name"])
+    return Response(content=data,media_type=row["content_type"],headers={"Content-Disposition":"attachment; filename*=UTF-8''"+filename,"Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"})
