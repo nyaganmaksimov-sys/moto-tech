@@ -145,6 +145,10 @@ async def run():
                 await connection.execute((base / "017_crm_tasks.sql").read_text(encoding="utf-8"))
                 print("Applied: 017_crm_tasks.sql")
             print("CRM task schema checks passed")
+            if not await connection.fetchval("SELECT to_regclass($1)", "public.crm_task_comments"):
+                await connection.execute((base / "018_crm_task_threads.sql").read_text(encoding="utf-8"))
+                print("Applied: 018_crm_task_threads.sql")
+            print("CRM discussion schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
