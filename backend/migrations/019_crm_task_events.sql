@@ -1,0 +1,2 @@
+CREATE TABLE IF NOT EXISTS crm_task_events (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), task_id uuid NOT NULL REFERENCES crm_tasks(id) ON DELETE CASCADE, actor_id uuid NOT NULL REFERENCES service_employees(id), event_type text NOT NULL, old_value text, new_value text, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS crm_task_events_task_idx ON crm_task_events(task_id,created_at);
