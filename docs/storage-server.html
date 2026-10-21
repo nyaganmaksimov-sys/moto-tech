@@ -104,7 +104,7 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
   <div class="row"><div><h2>Панель управления</h2><p class="muted">Рабочие данные PostgreSQL · MOTO TECH</p></div><button type="button" id="reloadRepairs">Обновить данные</button></div>
   <div class="metrics"><div class="metric">Всего заказов<strong id="ordersCount">—</strong></div><div class="metric">В работе<strong id="repairCount">—</strong></div><div class="metric">На хранении<strong id="storageCount">—</strong></div></div><section id="homeReviewCard" class="card hidden"><div class="row"><h3>Ожидают моего подтверждения <span id="homeReviewCount"></span></h3><button type="button" id="homeReviewOpen">Открыть в CRM →</button></div><div id="homeReviewItems"></div></section><section id="homeStaffCard" class="card hidden"><h3>Контроль персонала</h3><div id="homeStaffMetrics"></div><div id="homeStaffRows"></div></section><section id="homeOrderCard" class="card"><div class="row"><h3>Последние заказ-наряды</h3><button type="button" id="allRepairs">Все заказы →</button></div><div id="homeOrders"></div></section>
   <div class="row dashboard-content" id="repairDashboardContent">
-    <section class="card"><h3>Ремонтные заказ-наряды</h3><div id="repairItems" class="items"></div></section>
+    <section class="card"><h3>Ремонтные заказ-наряды</h3><div class="row" style="flex-wrap:wrap;gap:8px"><input id="repairSearch" placeholder="Поиск: номер, клиент, VIN, мотоцикл" aria-label="Поиск заказ-нарядов" style="flex:1;min-width:220px"><select id="repairFilterStatus" aria-label="Фильтр по статусу"><option value="all">Все статусы</option><option value="accepted">Принят</option><option value="diagnostics">Диагностика</option><option value="repair">В ремонте</option><option value="ready">Готов к выдаче</option><option value="issued">Выдан</option><option value="cancelled">Отменён</option></select></div><p id="repairSearchCount" class="muted"></p><div id="repairItems" class="items"></div></section>
     <section class="card"><h3>Новый заказ-наряд</h3><form id="repairCreate">
      <label>Клиент</label><input name="client_name" required minlength="2" maxlength="250">
      <label>Телефон</label><input name="phone" maxlength="80">
@@ -716,6 +716,20 @@ async function refreshMyRepairs(){
  wrapper.append(title,state);const btn=document.createElement('button');btn.textContent='Показать работы';const work=document.createElement('div');btn.onclick=()=>showRepairWorks(order.id,work);
  const add=document.createElement('button');add.textContent='Добавить работу';add.disabled=['issued','cancelled'].includes(order.status);add.onclick=async()=>{await addRepairWork(order.id);await refreshMyRepairs()};wrapper.append(btn,add,work);list.append(wrapper)}
 }
+function applyRepairFilters(){
+ const q=$('repairSearch').value.trim().toLocaleLowerCase('ru-RU'),st=$('repairFilterStatus').value;
+ let count=0;
+ for(const el of $('repairItems').children){
+  const row=repairRows.find(x=>String(x.id)===el.dataset.repairId);
+  if(!row)continue;
+  const haystack=[row.order_number,row.brand,row.model,row.client_name,row.vin,row.phone].filter(Boolean).join(' ').toLocaleLowerCase('ru-RU');
+  const show=(!q||haystack.includes(q))&&(st==='all'||row.status===st);
+  el.classList.toggle('hidden',!show);if(show)count++;
+ }
+ $('repairSearchCount').textContent='Показано '+count+' из '+repairRows.length+' заказ-нарядов';
+}
+$('repairSearch').addEventListener('input',applyRepairFilters);
+$('repairFilterStatus').addEventListener('change',applyRepairFilters);
 async function refreshRepairs(){
  const [orders,storages,employees]=await Promise.all([request('/repairs'),request('/storage'),request('/employees')]);
  repairRows=orders;
@@ -728,7 +742,7 @@ async function refreshRepairs(){
  const box=$('repairItems');box.replaceChildren();
  if(!orders.length){box.textContent='Заказов пока нет';return}
  for(const item of orders){
-  const container=document.createElement('div');container.id='repair-'+item.id;container.style.padding='10px 0';container.style.borderBottom='1px solid #394352';
+  const container=document.createElement('div');container.id='repair-'+item.id;container.dataset.repairId=item.id;container.style.padding='10px 0';container.style.borderBottom='1px solid #394352';
   const heading=document.createElement('div');heading.textContent=item.order_number+' · '+item.brand+' '+item.model+' · '+item.client_name;
   const detail=document.createElement('small');detail.textContent=repairStatusRu[item.status]||item.status;
   const select=document.createElement('select');select.style.marginTop='8px';select.setAttribute('aria-label','Изменить статус '+item.order_number);
@@ -759,6 +773,7 @@ async function refreshRepairs(){
   const historyRows=document.createElement('div');history.append(historyRows);history.ontoggle=async()=>{if(!history.open)return;try{const rows=await request('/repairs/'+item.id+'/events');historyRows.replaceChildren();for(const ev of rows){const p=document.createElement('p');const changes=ev.event_type==='status_changed'?' · '+(repairStatusRu[ev.payload.from]||ev.payload.from)+' → '+(repairStatusRu[ev.payload.to]||ev.payload.to):'';p.textContent=new Date(ev.happened_at).toLocaleString('ru-RU')+' · '+ev.actor_name+' · '+({created:'Заказ создан',work_added:'Добавлена работа',status_changed:'Статус изменён',mechanic_assigned:'Назначен механик'}[ev.event_type]||ev.event_type)+changes;historyRows.append(p)}if(!rows.length)historyRows.textContent='История пуста'}catch(err){historyRows.textContent=err.message}};
   container.append(worksBtn,addWork,workPanel,estimateBtn,estimate,taskBtn,history);box.append(container)
  }
+ applyRepairFilters();
 }
 $('reloadRepairs').onclick=()=>refreshRepairs().catch(e=>status(e.message));
 $('allRepairs').onclick=()=>switchSystem('repairs');
