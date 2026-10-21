@@ -1421,3 +1421,30 @@ async def edit_crm_assignment(task_id:uuid.UUID,payload:CrmTaskEdit,person=Depen
                 if old!=new:
                     await c.execute("INSERT INTO crm_task_events(task_id,actor_id,event_type,old_value,new_value) VALUES($1,$2,$3,$4,$5)",task_id,person["id"],field,str(old) if old is not None else None,str(new) if new is not None else None)
     return dict(updated)
+
+@app.get("/crm/notifications")
+async def crm_notifications(person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    async with db.acquire() as c:
+        rows=await c.fetch("""SELECT t.id,t.title,t.created_at,t.due_at,t.status,
+          r.notification_key IS NOT NULL AS is_read
+          FROM crm_tasks t LEFT JOIN crm_notification_reads r
+          ON r.employee_id=$1 AND r.notification_key=('task:'||t.id::text)
+          WHERE t.assigned_to=$1 AND t.status IN ('open','in_progress')
+          ORDER BY t.created_at DESC LIMIT 100""",person["id"])
+    return [{"key":"task:"+str(r["id"]),"task_id":str(r["id"]),
+             "title":r["title"],"overdue":bool(r["due_at"] and r["due_at"]<datetime.now(timezone.utc)),
+             "is_read":r["is_read"]} for r in rows]
+
+class CrmNotificationRead(BaseModel):
+    key: str = Field(max_length=100)
+
+@app.post("/crm/notifications/read")
+async def crm_read_notification(payload:CrmNotificationRead,person=Depends(require_roles(*ROLES)),db=Depends(database)):
+    if not payload.key.startswith("task:"):raise HTTPException(422,"Неверный ключ")
+    try:task_id=uuid.UUID(payload.key[5:])
+    except ValueError:raise HTTPException(422,"Неверный ключ")
+    async with db.acquire() as c:
+        exists=await c.fetchval("SELECT EXISTS(SELECT 1 FROM crm_tasks WHERE id=$1 AND assigned_to=$2)",task_id,person["id"])
+        if not exists:raise HTTPException(404,"Уведомление не найдено")
+        await c.execute("INSERT INTO crm_notification_reads(employee_id,notification_key) VALUES($1,$2) ON CONFLICT DO NOTHING",person["id"],payload.key)
+    return {"ok":True}
