@@ -102,7 +102,7 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
 <div id="fullSystem" class="hidden">
  <div class="server-dashboard">
   <div class="row"><div><h2>Панель управления</h2><p class="muted">Рабочие данные PostgreSQL · MOTO TECH</p></div><button type="button" id="reloadRepairs">Обновить данные</button></div>
-  <div class="metrics"><div class="metric">Всего заказов<strong id="ordersCount">—</strong></div><div class="metric">В работе<strong id="repairCount">—</strong></div><div class="metric">На хранении<strong id="storageCount">—</strong></div></div><section id="homeReviewCard" class="card hidden"><div class="row"><h3>Ожидают моего подтверждения <span id="homeReviewCount"></span></h3><button type="button" id="homeReviewOpen">Открыть в CRM →</button></div><div id="homeReviewItems"></div></section><section id="homeOrderCard" class="card"><div class="row"><h3>Последние заказ-наряды</h3><button type="button" id="allRepairs">Все заказы →</button></div><div id="homeOrders"></div></section>
+  <div class="metrics"><div class="metric">Всего заказов<strong id="ordersCount">—</strong></div><div class="metric">В работе<strong id="repairCount">—</strong></div><div class="metric">На хранении<strong id="storageCount">—</strong></div></div><section id="homeReviewCard" class="card hidden"><div class="row"><h3>Ожидают моего подтверждения <span id="homeReviewCount"></span></h3><button type="button" id="homeReviewOpen">Открыть в CRM →</button></div><div id="homeReviewItems"></div></section><section id="homeStaffCard" class="card hidden"><h3>Контроль персонала</h3><div id="homeStaffMetrics"></div><div id="homeStaffRows"></div></section><section id="homeOrderCard" class="card"><div class="row"><h3>Последние заказ-наряды</h3><button type="button" id="allRepairs">Все заказы →</button></div><div id="homeOrders"></div></section>
   <div class="row dashboard-content" id="repairDashboardContent">
     <section class="card"><h3>Ремонтные заказ-наряды</h3><div id="repairItems" class="items"></div></section>
     <section class="card"><h3>Новый заказ-наряд</h3><form id="repairCreate">
@@ -185,6 +185,8 @@ function switchSystem(view){
  $('repairDashboardContent').classList.toggle('hidden',home);
  $('homeOrderCard').classList.toggle('hidden',!home);
  $('homeReviewCard').classList.toggle('hidden',!home||!['owner_manager','manager','administrator'].includes(staffRole));
+ $('homeStaffCard').classList.toggle('hidden',!home||!['owner_manager','manager','administrator'].includes(staffRole));
+ if(home&&['owner_manager','manager','administrator'].includes(staffRole))refreshHomeStaff().catch(e=>status(e.message));
  if(home&&['owner_manager','manager','administrator'].includes(staffRole))refreshHomeReviews().catch(e=>status(e.message));
  $('workspace').classList.toggle('hidden',!storage);
  $('detail').classList.toggle('hidden',!storage||!current);
@@ -295,6 +297,15 @@ async function refreshProcurement(){
 $('supplierCreate').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;try{await request('/suppliers',{method:'POST',body:Object.fromEntries(new FormData(form).entries())});form.reset();await refreshProcurement();status('Поставщик сохранён')}catch(err){status(err.message)}};
 $('partsRequestCreate').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget;try{const data=Object.fromEntries(new FormData(form).entries());data.supplier_id=data.supplier_id||null;data.repair_id=data.repair_id||null;data.quantity=Number(data.quantity);await request('/parts-requests',{method:'POST',body:data});form.reset();await refreshProcurement();status('Заявка сохранена')}catch(err){status(err.message)}};
 let crmCachedTasks=[];
+async function refreshHomeStaff(){
+ const staff=await request('/crm/staff-performance'),box=$('homeStaffRows');box.replaceChildren();
+ const totals={active:0,approved:0,overdue:0,returns:0};for(const item of staff)for(const k of Object.keys(totals))totals[k]+=Number(item[k]||0);
+ $('homeStaffMetrics').textContent='Активные: '+totals.active+' · Принято: '+totals.approved+' · Просрочено: '+totals.overdue+' · Возвраты: '+totals.returns;
+ if(!staff.length){box.textContent='Нет сотрудников';return}
+ const table=document.createElement('table');table.style.width='100%';
+ const heading=document.createElement('tr');for(const label of ['Сотрудник','Активные','На проверке','Принято','Просрочено','Возвраты','% принятых']){const th=document.createElement('th');th.textContent=label;heading.append(th)}table.append(heading);
+ for(const e of staff){const tr=document.createElement('tr');const finished=Number(e.approved||0),pending=Number(e.active||0),pct=finished+pending?Math.round(finished/(finished+pending)*100):0;for(const v of [e.full_name,e.active,e.pending_review,e.approved,e.overdue,e.returns,pct+'%']){const td=document.createElement('td');td.textContent=String(v);td.style.padding='7px 5px';tr.append(td)}table.append(tr)}box.append(table)
+}
 async function refreshHomeReviews(){
  const tasks=await request('/crm/tasks');const pending=tasks.filter(t=>t.status==='review'&&t.assigned_to!==staffId);
  $('homeReviewCount').textContent='('+pending.length+')';const box=$('homeReviewItems');box.replaceChildren();
