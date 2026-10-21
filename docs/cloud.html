@@ -145,7 +145,7 @@ const vehicle=await db.from('vehicles').select('*').eq('id',id).maybeSingle();if
 const v=vehicle.data;
 const results=await Promise.all([
 db.from('customers').select('full_name,phone').eq('id',v.customer_id).maybeSingle(),
-db.from(staff.role==='mechanic'?'mechanic_orders':'orders').select('id,order_number,status,complaint,created_at').eq('vehicle_id',id).order('created_at',{ascending:false}).limit(100),
+db.from(staff.role==='mechanic'?'mechanic_orders':'orders').select('id,order_number,status,complaint,created_at,deleted_at').eq('vehicle_id',id).order('created_at',{ascending:false}).limit(100),
 db.from(staff.role==='mechanic'?'mechanic_storage':'storage_records').select('contract_number,status,start_date,return_date').eq('vehicle_id',id).order('created_at',{ascending:false}).limit(100),
 db.from('vehicle_intake_photos').select('id,kind,object_path,defect_description,created_at').eq('vehicle_id',id).order('created_at',{ascending:false})]);
 for(const q of results)if(q.error)throw q.error;
@@ -154,7 +154,7 @@ panel.replaceChildren(elt('h2',[v.brand,v.model].filter(Boolean).join(' ')||'М�
 for(const line of ['Тип: '+(v.category||'—'),'VIN: '+(v.vin||'не указан'),'Год: '+(v.year||'—'),'Пробег: '+(v.mileage||'—'),'Номер: '+(v.plate||'—'),'Владелец: '+(owner?.full_name||'—'),'Телефон: '+(owner?.phone||'—')])panel.append(elt('p',line,'muted'));
 function history(title,entries,make){panel.append(elt('h3',title));if(!entries.length)panel.append(elt('p','Нет записей','muted'));for(const e of entries)panel.append(elt('div',make(e),'item'))}
 panel.append(elt('h3','Ремонты'));if(!repairs.length)panel.append(elt('p','Нет записей','muted'));
-for(const order of repairs){const wrap=elt('div','','item');wrap.append(elt('p',[order.order_number,order.status,order.complaint].filter(Boolean).join(' · ')));
+for(const order of repairs){if(order.deleted_at)continue;const wrap=elt('div','','item');wrap.append(elt('p',[order.order_number,order.status,order.complaint].filter(Boolean).join(' · ')));
 const open=elt('button','Открыть заказ');open.type='button';open.onclick=()=>openRecord('orders',order.id);wrap.append(open);
 if(order.status!=='Выдан'){const edit=elt('button','Редактировать');edit.type='button';edit.onclick=async()=>{const value=prompt('Описание проблемы в заказе '+order.order_number,order.complaint||'');if(value===null)return;if(value.trim().length<3)return msg('Описание минимум 3 символа');if(!await confirmActionPin())return;edit.disabled=true;try{const result=await db.rpc('update_repair_request',{p_order:order.id,p_complaint:value.trim()});if(result.error)throw result.error;msg('Заказ обновлён');await openVehicle(id)}catch(e){msg('Ошибка: '+e.message);edit.disabled=false}};wrap.append(edit);
 if(['owner_manager','manager','administrator'].includes(staff.role)){const remove=elt('button','Удалить ошибочный заказ');remove.type='button';remove.className='secondary';remove.onclick=async()=>{const reason=prompt('Причина удаления заказа '+order.order_number+' (не менее 5 символов)');if(reason===null)return;if(reason.trim().length<5)return msg('Укажите причину удаления');if(!confirm('Архивировать заказ '+order.order_number+'? История сохранится.'))return;if(!await confirmActionPin())return;remove.disabled=true;const result=await db.rpc('admin_archive_bad_order',{p_order:order.id,p_reason:reason.trim()});if(result.error){msg('Ошибка удаления: '+result.error.message);remove.disabled=false}else{msg('Заказ архивирован');await openVehicle(id)}};wrap.append(remove)}}panel.append(wrap)}
