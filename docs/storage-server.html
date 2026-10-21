@@ -755,7 +755,9 @@ async function refreshRepairs(){
   const addWork=document.createElement('button');addWork.type='button';addWork.textContent='Добавить работу';addWork.disabled=['issued','cancelled'].includes(item.status);addWork.onclick=()=>addRepairWork(item.id);
   const estimateBtn=document.createElement('button');estimateBtn.type='button';estimateBtn.textContent='Расчёт заказа';const estimate=document.createElement('div');estimateBtn.onclick=()=>showRepairStatement(item.id,estimate);
   const taskBtn=document.createElement('button');taskBtn.type='button';taskBtn.textContent='Поставить задачу по ремонту';taskBtn.onclick=()=>openCrmFor('repair',item.id);
-  container.append(worksBtn,addWork,workPanel,estimateBtn,estimate,taskBtn);box.append(container)
+  const history=document.createElement('details');const summary=document.createElement('summary');summary.textContent='История заказ-наряда';history.append(summary);
+  const historyRows=document.createElement('div');history.append(historyRows);history.ontoggle=async()=>{if(!history.open)return;try{const rows=await request('/repairs/'+item.id+'/events');historyRows.replaceChildren();for(const ev of rows){const p=document.createElement('p');const changes=ev.event_type==='status_changed'?' · '+(repairStatusRu[ev.payload.from]||ev.payload.from)+' → '+(repairStatusRu[ev.payload.to]||ev.payload.to):'';p.textContent=new Date(ev.happened_at).toLocaleString('ru-RU')+' · '+ev.actor_name+' · '+({created:'Заказ создан',work_added:'Добавлена работа',status_changed:'Статус изменён',mechanic_assigned:'Назначен механик'}[ev.event_type]||ev.event_type)+changes;historyRows.append(p)}if(!rows.length)historyRows.textContent='История пуста'}catch(err){historyRows.textContent=err.message}};
+  container.append(worksBtn,addWork,workPanel,estimateBtn,estimate,taskBtn,history);box.append(container)
  }
 }
 $('reloadRepairs').onclick=()=>refreshRepairs().catch(e=>status(e.message));
