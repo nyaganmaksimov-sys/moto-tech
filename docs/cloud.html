@@ -69,7 +69,7 @@ async function printRepairDocument(order,kind){
 }
 async function openRecord(table,id){
 if(!['orders','storage_records'].includes(table)||!validRecord(id))return;
-const panel=$('vehicleDetail');panel.style.display='block';panel.replaceChildren(elt('h2','Загрузка записи…'));
+const panel=$('vehicleDetail');panel.classList.remove('cloud-hidden');panel.style.display='block';panel.replaceChildren(elt('h2','Загрузка записи…'));
 try{
  const result=await db.from(table).select('*').eq('id',id).single();
  if(result.error)throw result.error;const r=result.data;
@@ -168,5 +168,5 @@ function selectView(view){
  if(showList)void loadTab(view);
 }
 document.querySelectorAll('#sidebar [data-view]').forEach(b=>b.onclick=()=>selectView(b.dataset.view));
-try{await refresh();selectView('overview')}catch(e){msg(e.message)}
+try{selectView('overview');await refresh();if(validOrder||validStorage||validVehicle)$('vehicleDetail').classList.remove('cloud-hidden')}catch(e){msg(e.message)}
 </script></div></body></html>
