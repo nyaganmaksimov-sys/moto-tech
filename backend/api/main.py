@@ -1403,3 +1403,21 @@ async def crm_task_history(task_id:uuid.UUID,person=Depends(require_roles(*ROLES
             raise HTTPException(403,"Нет доступа")
         rows=await c.fetch("SELECT ev.event_type,ev.old_value,ev.new_value,ev.created_at,emp.full_name AS actor_name FROM crm_task_events ev JOIN service_employees emp ON emp.id=ev.actor_id WHERE ev.task_id=$1 ORDER BY ev.created_at DESC LIMIT 200",task_id)
     return [dict(r) for r in rows]
+
+class CrmTaskEdit(BaseModel):
+    assigned_to: uuid.UUID
+    due_at: datetime | None = None
+
+@app.patch("/crm/tasks/{task_id}/assignment")
+async def edit_crm_assignment(task_id:uuid.UUID,payload:CrmTaskEdit,person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
+    async with db.acquire() as c:
+        async with c.transaction():
+            previous=await c.fetchrow("SELECT assigned_to,due_at FROM crm_tasks WHERE id=$1 FOR UPDATE",task_id)
+            if not previous:raise HTTPException(404,"Задача не найдена")
+            active=await c.fetchval("SELECT EXISTS(SELECT 1 FROM service_employees WHERE id=$1 AND active=true)",payload.assigned_to)
+            if not active:raise HTTPException(422,"Исполнитель не найден или неактивен")
+            updated=await c.fetchrow("UPDATE crm_tasks SET assigned_to=$2,due_at=$3,updated_at=now() WHERE id=$1 RETURNING *",task_id,payload.assigned_to,payload.due_at)
+            for field,old,new in (("assignee_changed",previous["assigned_to"],payload.assigned_to),("due_changed",previous["due_at"],payload.due_at)):
+                if old!=new:
+                    await c.execute("INSERT INTO crm_task_events(task_id,actor_id,event_type,old_value,new_value) VALUES($1,$2,$3,$4,$5)",task_id,person["id"],field,str(old) if old is not None else None,str(new) if new is not None else None)
+    return dict(updated)
