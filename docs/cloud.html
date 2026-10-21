@@ -8,6 +8,50 @@ function elt(tag,text,klass){const x=document.createElement(tag);x.textContent=S
 async function loadProfile(){const {data:{user}}=await db.auth.getUser();if(!user){staff=null;return false}const r=await db.from('staff').select('id,full_name,role,active,phone,bio,preferred_name').eq('auth_user_id',user.id).eq('active',true).maybeSingle();if(r.error)throw new Error(r.error.message);staff=r.data;if(!staff){await db.auth.signOut();throw new Error('У вашей учётной записи нет активной роли сотрудника. Обратитесь к руководителю.')}return true}
 async function refresh(){const valid=await loadProfile();if(!valid&&(validVehicle||validOrder||validStorage))$('loginLink').href='./login.html'+location.search;$('login').style.display=valid?'none':'block';$('dashboard').style.display=valid?'block':'none';$('signout').style.display=valid?'inline-block':'none';if(valid){$('profileName').value=staff.preferred_name||'';$('profilePhone').value=staff.phone||'';$('profileBio').value=staff.bio||'';$('who').textContent=staff.preferred_name||staff.full_name;$('role').textContent=staff.role;const p=await db.rpc('my_pin_status');if(p.error)throw new Error(p.error.message);const must=!!p.data?.[0]?.must_change;$('pinSetup').style.display=must?'block':'none';$('workArea').style.display=must?'none':'block';if(!must){await loadTab('orders');if(validOrder){await openRecord('orders',validOrder)}else if(validStorage){await openRecord('storage_records',validStorage)}else if(validVehicle){await openVehicle(validVehicle)}}}}
 async function loadTab(table){const titles={orders:'Заказ-наряды',storage_records:'Хранение мотоциклов',price_items:'Прайс-лист',part_requests:'Заявки на запчасти',customers:'Клиенты',vehicles:'Техника',staff:'Сотрудники'};if(!titles[table])return;$('listTitle').textContent=titles[table];$('list').replaceChildren(elt('p','Загрузка…','muted'));const r=await db.from(table).select('*').order(table==='price_items'?'updated_at':'created_at',{ascending:false}).limit(100);if(r.error){$('list').replaceChildren(elt('p','Ошибка доступа: '+r.error.message,'muted'));return}if(!r.data?.length){$('list').replaceChildren(elt('p','В таблице пока нет доступных записей','muted'));return}const box=document.createDocumentFragment();for(const x of r.data){const item=elt('div','','item');const name=x.order_number||x.contract_number||x.full_name||[x.brand,x.model].filter(Boolean).join(' ')||x.name||x.id;item.append(elt('b',name),elt('small',x.status||x.category||x.role||''));if(table==='orders'){item.append(elt('small','Жалоба: '+(x.complaint||'—')+' · Сумма: '+Number(x.amount||0).toLocaleString('ru-RU')+' ₽'))}if(table==='storage_records'){item.append(elt('small','Начало: '+(x.start_date||'—')+' · Тариф: '+Number(x.monthly_rate||0).toLocaleString('ru-RU')+' ₽/мес.'))}if(table==='customers'){item.append(elt('small','Телефон: '+(x.phone||'—')))}if((table==='orders'||table==='storage_records')&&x.vehicle_id){const qr=elt('button','QR техники');qr.type='button';qr.className='secondary';qr.style.margin='8px';qr.onclick=()=>showVehicleQR(x.vehicle_id,table==='orders'?'Ремонт':'Хранение',x.order_number||x.contract_number||'',table==='orders'?'order':'storage',x.id);item.append(qr);const open=elt('button','Открыть '+(table==='orders'?'заказ':'договор'));open.onclick=()=>openRecord(table,x.id);item.append(open)}if(table==='vehicles'){item.append(elt('small','VIN: '+(x.vin||'не указан')));const b=elt('button','Открыть карточку');b.type='button';b.onclick=()=>openVehicle(x.id);item.append(b);const qr=elt('button','QR техники');qr.type='button';qr.className='secondary';qr.style.margin='8px';qr.onclick=()=>showVehicleQR(x.id,'Техника','');item.append(qr)}box.append(item)}$('list').replaceChildren(box)}
+
+async function printRepairDocument(order,kind){
+ const titles={intake:'Акт приёма-передачи техники',order:'Заказ-наряд',completed:'Акт выполненных работ',handover:'Акт выдачи техники'};
+ if(!titles[kind])return;
+ const popup=window.open('','_blank');
+ if(!popup){msg('Разрешите всплывающее окно для печати');return}
+ try{
+ const requests=await Promise.all([
+  db.from('customers').select('full_name,phone,email').eq('id',order.customer_id).maybeSingle(),
+  db.from('vehicles').select('brand,model,vin,plate,year,mileage').eq('id',order.vehicle_id).maybeSingle(),
+  db.from('order_cost_items').select('item_type,name,quantity,unit_price').eq('order_id',order.id).order('created_at'),
+  db.from('repair_handovers').select('*').eq('order_id',order.id).maybeSingle(),
+  db.from('repair_work_log').select('kind,description,created_at').eq('order_id',order.id).order('created_at')
+ ]);
+ for(const result of requests)if(result.error)throw result.error;
+ const [customer,vehicle,items,handover,workLog]=requests.map(x=>x.data);
+ if(kind==='handover'&&!handover)throw new Error('Выдача ещё не оформлена');
+ if(kind==='completed'&&!items.length)throw new Error('В заказе пока нет работ и запчастей');
+ const doc=popup.document;doc.title='MOTO TECH — '+titles[kind];
+ const style=doc.createElement('style');style.textContent='@page{size:A4;margin:15mm}body{font:12px Arial,sans-serif;color:#151515;line-height:1.5}header{border-bottom:3px solid #bd2639;padding-bottom:12px;margin-bottom:20px}.brand{font-size:25px;font-weight:800}.brand b{color:#bd2639}h1{font-size:19px;text-align:center;margin:22px 0}h2{font-size:14px;margin:18px 0 8px}p{margin:6px 0}table{width:100%;border-collapse:collapse;margin:10px 0}td,th{border:1px solid #888;padding:6px;text-align:left}th{background:#eee}.sign{display:flex;justify-content:space-between;margin-top:45px;gap:30px}.sign span{width:48%;border-top:1px solid #333;padding-top:6px}.foot{margin-top:25px;color:#555;font-size:10px}@media print{button{display:none}}';doc.head.append(style);
+ const append=(tag,text,parent=doc.body)=>{const el=doc.createElement(tag);el.textContent=String(text??'—');parent.append(el);return el};
+ const head=doc.createElement('header');const brand=append('div','MOTO TECH',head);brand.className='brand';doc.body.append(head);
+ append('h1',titles[kind]);append('p','Документ к заказ-наряду № '+order.order_number);append('p','Дата создания заказа: '+new Date(order.created_at).toLocaleDateString('ru-RU'));
+ append('h2','Стороны и техника');
+ append('p','Клиент: '+(customer?.full_name||'не указан')+' · Телефон: '+(customer?.phone||'не указан'));
+ append('p','Мотоцикл: '+[vehicle?.brand,vehicle?.model].filter(Boolean).join(' ')+' · VIN / рама: '+(vehicle?.vin||'не указан'));
+ append('p','Год: '+(vehicle?.year||'не указан')+' · Госномер: '+(vehicle?.plate||'не указан')+' · Пробег: '+(vehicle?.mileage||'не указан'));
+ append('p','Обращение: '+(order.complaint||'не указано'));
+ if(kind==='intake'){append('h2','Факт передачи');append('p','Клиент передаёт технику сервису для диагностики и/или ремонта. Состояние, повреждения и комплектность необходимо проверить с клиентом при фактической передаче и зафиксировать отдельно.');append('p','Фото осмотра доступны в электронной карточке техники.')}
+ if(kind==='order'||kind==='completed'){
+  append('h2',kind==='order'?'Смета работ и материалов':'Перечень работ и материалов');
+  const table=doc.createElement('table');const tr=doc.createElement('tr');
+  for(const txt of ['Вид','Наименование','Кол-во','Цена','Сумма'])append('th',txt,tr);table.append(tr);
+  let total=0;
+  for(const item of items){const row=doc.createElement('tr');const amount=Number(item.quantity)*Number(item.unit_price);total+=amount;for(const txt of [item.item_type==='part'?'Запчасть':'Работа',item.name,item.quantity,Number(item.unit_price).toFixed(2),amount.toFixed(2)])append('td',txt,row);table.append(row)}
+  doc.body.append(table);append('p','Итого по смете: '+total.toFixed(2)+' ₽');
+  if(kind==='completed'){append('h2','Записи о выполнении');for(const log of workLog.filter(x=>x.kind==='work'))append('p','• '+log.description)}
+ }
+ if(kind==='handover'){append('h2','Сведения о выдаче');append('p','Дата: '+new Date(handover.issued_at).toLocaleString('ru-RU'));append('p','Получатель: '+handover.customer_name);append('p','Состояние: '+handover.vehicle_condition);append('p','Комплектность: '+handover.returned_items);append('p','Оплачено: '+Number(handover.paid_amount).toFixed(2)+' ₽ · Статус: '+handover.payment_status);append('p','Подтверждение: '+handover.customer_acknowledgement)}
+ const sign=doc.createElement('div');sign.className='sign';append('span','Представитель сервиса / подпись',sign);append('span','Клиент / подпись',sign);doc.body.append(sign);
+ append('p','Шаблон документа для проверки и подписания; сведения о передаче, состоянии и согласии клиента подтверждаются фактическими подписями.').className='foot';
+ popup.focus();popup.print();
+ }catch(error){popup.close();msg('Не удалось сформировать документ: '+error.message)}
+}
 async function openRecord(table,id){
 if(!['orders','storage_records'].includes(table)||!validRecord(id))return;
 const panel=$('vehicleDetail');panel.style.display='block';panel.replaceChildren(elt('h2','Загрузка записи…'));
@@ -21,7 +65,13 @@ try{
  const view=elt('button','Карточка мотоцикла');view.onclick=()=>openVehicle(r.vehicle_id);panel.append(view);
  const qr=elt('button','Печать QR этого '+(table==='orders'?'заказа':'договора'));qr.className='secondary';qr.onclick=()=>showVehicleQR(r.vehicle_id,table==='orders'?'Ремонт':'Хранение',r.order_number||r.contract_number||'',table==='orders'?'order':'storage',r.id);panel.append(qr)
  }
- if(table==='orders'){const log=await db.from('repair_work_log').select('kind,description,created_at').eq('order_id',id).order('created_at',{ascending:false}).limit(100);panel.append(elt('h3','Журнал ремонта'));if(log.error)panel.append(elt('p',log.error.message));else for(const e of log.data)panel.append(elt('div',e.kind+': '+e.description,'item'));const handover=await db.from('repair_handovers').select('*').eq('order_id',id).maybeSingle();
+ if(table==='orders'){
+ const docs=elt('div','','row');docs.append(elt('h3','Документы заказ-наряда'));
+ for(const [kind,label] of [['intake','Акт приёма-передачи'],['order','Заказ-наряд'],['completed','Акт выполненных работ'],['handover','Акт выдачи']]){
+  const button=elt('button',label);button.type='button';button.className='secondary';button.onclick=()=>printRepairDocument(r,kind);docs.append(button)
+ }panel.append(docs);
+}
+if(table==='orders'){const log=await db.from('repair_work_log').select('kind,description,created_at').eq('order_id',id).order('created_at',{ascending:false}).limit(100);panel.append(elt('h3','Журнал ремонта'));if(log.error)panel.append(elt('p',log.error.message));else for(const e of log.data)panel.append(elt('div',e.kind+': '+e.description,'item'));const handover=await db.from('repair_handovers').select('*').eq('order_id',id).maybeSingle();
 if(handover.error)panel.append(elt('p','Ошибка сведений о выдаче: '+handover.error.message,'muted'));
 if(handover.data){const act=elt('button','Печать акта выдачи');act.className='secondary';act.onclick=()=>{const win=window.open('','_blank');if(!win){msg('Разрешите окно для печати');return}const doc=win.document;doc.title='Акт выдачи MOTO TECH';const css=doc.createElement('style');css.textContent='body{font:14px Arial;margin:36px;line-height:1.6;color:#111}h1{text-align:center;font-size:20px}p{margin:9px 0}.signature{margin-top:45px}';doc.head.append(css);const h=doc.createElement('h1');h.textContent='MOTO TECH · Акт выдачи техники';doc.body.append(h);for(const line of ['Заказ-наряд: '+(r.order_number||''),'Дата выдачи: '+new Date(handover.data.issued_at).toLocaleString('ru-RU'),'Получатель: '+handover.data.customer_name,'Состояние техники: '+handover.data.vehicle_condition,'Выданные принадлежности: '+handover.data.returned_items,'Сумма заказа: '+Number(r.amount||0).toFixed(2)+' ₽','Получено: '+Number(handover.data.paid_amount).toFixed(2)+' ₽','Подтверждение получения: '+handover.data.customer_acknowledgement]){const p=doc.createElement('p');p.textContent=line;doc.body.append(p)}const sig=doc.createElement('p');sig.className='signature';sig.textContent='Сдал: _____________________       Получил: _____________________';doc.body.append(sig);win.focus();setTimeout(()=>win.print(),300)};panel.append(act);panel.append(elt('h3','Выдача оформлена'));for(const line of ['Дата: '+new Date(handover.data.issued_at).toLocaleString('ru-RU'),'Клиент: '+handover.data.customer_name,'Состояние: '+handover.data.vehicle_condition,'Возвращённая комплектность: '+handover.data.returned_items,'Оплата: '+handover.data.payment_status+' · '+handover.data.paid_amount+' ₽'])panel.append(elt('p',line,'muted'))}
 if(['owner_manager','manager','administrator'].includes(staff.role)&&r.status==='Готов'&&!handover.data){
