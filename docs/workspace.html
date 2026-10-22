@@ -236,7 +236,7 @@ function showDetailPanel(){const overlay=$('vehicleOverlay');if(overlay.parentEl
 $('closeVehicleOverlay').onclick=()=>{$('vehicleOverlay').style.display='none'};
 $('vehicleOverlay').addEventListener('click',e=>{if(e.target===$('vehicleOverlay'))$('vehicleOverlay').style.display='none'});
 async function showVehicleQR(vehicleId,purpose,refNumber,recordType,recordId){
- const url=new URL('./cloud.html',location.href);url.searchParams.set('vehicle',vehicleId);if(recordType&&validRecord(recordId))url.searchParams.set(recordType,recordId);
+ const url=new URL('./vehicle-detail.html',location.href);url.searchParams.set('id',vehicleId);
  const panel=showDetailPanel();panel.replaceChildren(elt('h2','QR · '+purpose),elt('p',refNumber||'Карточка техники','muted'));
  const canvas=document.createElement('div');canvas.style.cssText='background:white;padding:14px;display:inline-block;border-radius:9px';panel.append(canvas);
  try{
