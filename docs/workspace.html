@@ -158,6 +158,35 @@ try{
  const details=table==='orders'?['Статус: '+r.status,'Жалоба: '+(r.complaint||'—'),...(staff.role==='mechanic'?[]:['Сумма: '+Number(r.amount||0).toLocaleString('ru-RU')+' ₽'])]:['Статус: '+r.status,'Начало хранения: '+(r.start_date||'—'),'Возврат: '+(r.return_date||'—'),...(staff.role==='mechanic'?[]:['Тариф: '+Number(r.monthly_rate||0).toLocaleString('ru-RU')+' ₽'])];
  for(const line of details)panel.append(elt('p',line,'muted'));
  if(!['Выдан','Отклонён','Завершено','Возвращён'].includes(r.status)&&!r.deleted_at){const intakeEdit=elt('button','Редактировать приёмку');intakeEdit.type='button';intakeEdit.onclick=()=>showIntakeEditor(table,r,panel);panel.append(intakeEdit)}
+if(table==='orders'&&!r.deleted_at){
+ const wb=await db.rpc('mechanic_workboard',{p_order:id});
+ if(wb.error){panel.append(elt('p','Работы механика: '+wb.error.message,'muted'))}
+ else{
+  const data=wb.data||{},workBox=elt('div','','card');workBox.append(elt('h3','Работы и заработок механика'));
+  const earn=Number(data.earnings||0);workBox.append(elt('p','Заработок механика: '+earn.toLocaleString('ru-RU')+' ₽ (40% от текущей суммы ремонта)','muted'));
+  workBox.append(elt('p','Предварительный расчёт. При изменении стоимости ремонта сумма пересчитается.','muted'));
+  const works=(data.items||[]).filter(x=>x.item_type==='work');
+  if(!works.length)workBox.append(elt('p','Пока нет работ в заказ-наряде.','muted'));
+  for(const job of works){
+   const jobBox=elt('div','','item');
+   const title=elt('b',job.name+' · '+Number(job.quantity||1)+' × '+Number(job.unit_price||0).toLocaleString('ru-RU')+' ₽');
+   jobBox.append(title);
+   const checkLabel=document.createElement('label');checkLabel.style.cssText='display:flex;align-items:center;gap:10px;margin:9px 0';
+   const check=document.createElement('input');check.type='checkbox';check.checked=!!job.completed;check.style.width='20px';
+   checkLabel.append(check,document.createTextNode(' Работа выполнена'));jobBox.append(checkLabel);
+   check.onchange=async()=>{check.disabled=true;const done=await db.rpc('set_mechanic_work_done',{p_line:job.id,p_completed:check.checked});if(done.error){msg('Ошибка отметки: '+done.error.message);check.checked=!check.checked;check.disabled=false}else{msg(check.checked?'Работа отмечена выполненной':'Отметка выполнения снята');check.disabled=false}};
+   const count=elt('p','Фотографии выполнения: '+(job.photos||[]).length+' из 5','muted');jobBox.append(count);
+   const gallery=elt('div','','row');for(const photo of job.photos||[]){const pic=elt('button','Открыть фото');pic.type='button';pic.className='secondary';pic.onclick=async()=>{const signed=await db.storage.from('moto-intake-private').createSignedUrl(photo.path,120);if(signed.error)return msg('Фото: '+signed.error.message);window.open(signed.data.signedUrl,'_blank','noopener,noreferrer')};gallery.append(pic)}jobBox.append(gallery);
+   if((job.photos||[]).length<5){
+    const upload=document.createElement('input');upload.type='file';upload.accept='image/*';upload.multiple=true;upload.style.maxWidth='100%';
+    upload.onchange=async()=>{const files=Array.from(upload.files||[]);const remaining=5-(job.photos||[]).length;if(!files.length)return;if(files.length>remaining){msg('Можно добавить не более '+remaining+' фото');upload.value='';return}upload.disabled=true;
+     try{for(const file of files){if(!file.type.startsWith('image/')||file.size>8*1024*1024)throw new Error('Только фотографии до 8 МБ');const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,6)||'jpg';const path=(await db.auth.getUser()).data.user.id+'/work-progress/'+id+'/'+job.id+'/'+crypto.randomUUID()+'.'+ext;const sent=await db.storage.from('moto-intake-private').upload(path,file,{contentType:file.type,upsert:false});if(sent.error)throw sent.error;const attach=await db.rpc('attach_mechanic_work_photo',{p_line:job.id,p_path:path});if(attach.error)throw attach.error}msg('Фотографии выполнения сохранены');await openRecord('orders',id)}catch(e){msg('Ошибка фотографий: '+e.message);upload.disabled=false}};jobBox.append(upload)
+   }
+   workBox.append(jobBox)
+  }
+  panel.append(workBox)
+ }
+}
 if(table==='orders'&&r.mechanic_id){const mechanic=await db.from('staff').select('full_name').eq('id',r.mechanic_id).maybeSingle();panel.append(elt('p','Ответственный механик: '+(mechanic.data?.full_name||'не найден'),'muted'))}
  if(table==='orders'&&['owner_manager','manager','administrator'].includes(staff.role)&&r.status!=='Выдан'&&!r.deleted_at){const box=elt('div','','card');box.append(elt('h3','Назначение механика'));const select=document.createElement('select');const workers=await db.from('staff').select('id,full_name,login').eq('active',true).eq('role','mechanic').order('full_name');if(workers.error)box.append(elt('p',workers.error.message));else{for(const w of workers.data||[]){const opt=document.createElement('option');opt.value=w.id;opt.textContent=w.full_name+' ('+w.login+')';select.append(opt)}if(r.mechanic_id)select.value=r.mechanic_id;const save=elt('button','Назначить механика');save.type='button';save.onclick=async()=>{if(!select.value)return msg('Выберите механика');if(!await confirmActionPin())return;save.disabled=true;const result=await db.rpc('assign_repair_mechanic',{p_order_number:r.order_number,p_mechanic:select.value});if(result.error){msg('Ошибка назначения: '+result.error.message);save.disabled=false}else{msg('Механик назначен');await openRecord('orders',id)}};box.append(select,save)}panel.append(box)}
  if(table==='orders'&&r.status!=='Выдан'&&!r.deleted_at){
