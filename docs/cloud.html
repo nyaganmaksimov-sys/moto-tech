@@ -300,18 +300,26 @@ $('recognizePtsButton').onclick=async()=>{
  const factor=Math.min(3,Math.max(1,2300/Math.max(base.width,h)));
  const image=document.createElement('canvas');image.width=Math.round(base.width*factor);image.height=Math.round(h*factor);
  const ctx=image.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,image.width,image.height);ctx.drawImage(base,0,y,base.width,h,0,0,image.width,image.height);
- const enhanced=document.createElement('canvas');enhanced.width=image.width;enhanced.height=image.height;const ec=enhanced.getContext('2d');ec.filter='grayscale(1) contrast(1.35)';ec.drawImage(image,0,0);
- status.textContent='Распознаём выбранную область…';const [a,b]=await Promise.all([worker.recognize(image),worker.recognize(enhanced)]);
- const result=(b.data.confidence||0)>(a.data.confidence||0)?b:a;
- const recognized=result.data.text||'';const confidence=Number(result.data.confidence||0);
+ const enhanced=document.createElement('canvas');enhanced.width=image.width;enhanced.height=image.height;const ec=enhanced.getContext('2d');ec.filter='grayscale(1) contrast(1.7)';ec.drawImage(image,0,0);
+ const binary=document.createElement('canvas');binary.width=image.width;binary.height=image.height;const bc=binary.getContext('2d',{willReadFrequently:true});bc.drawImage(enhanced,0,0);const pixels=bc.getImageData(0,0,binary.width,binary.height);for(let i=0;i<pixels.data.length;i+=4){const gray=pixels.data[i];const value=gray<165?0:255;pixels.data[i]=value;pixels.data[i+1]=value;pixels.data[i+2]=value}bc.putImageData(pixels,0,0);
+ status.textContent='Распознаём документ: обычное и контрастное изображение…';
+ const results=[];for(const source of [image,enhanced,binary]){const result=await worker.recognize(source);results.push(result)}
+ const best=results.reduce((previous,current)=>(current.data.confidence||0)>(previous.data.confidence||0)?current:previous);
+ const recognized=best.data.text||'';const confidence=Number(best.data.confidence||0);
  $('ptsRawText').textContent=recognized;$('ptsRecognized').open=true;
  const candidates=$('ptsCandidates');candidates.replaceChildren();
- const text=recognized.toUpperCase();const vins=[...new Set((text.match(/\b[A-HJ-NPR-Z0-9]{17}\b/g)||[]))].filter(v=>/[A-Z]/.test(v)&&/[0-9]/.test(v));
- function candidate(title,value,target){const button=elt('button','Подставить '+title+': '+value);button.type='button';button.onclick=()=>{$(target).value=value;status.textContent='Значение перенесено. Сверьте его с оригиналом документа.'};candidates.append(button)}
- for(const vin of vins.slice(0,3))candidate('VIN',vin,'inVin');
- const lines=recognized.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
- for(let i=0;i<lines.length;i++){const m=lines[i].match(/(?:МАРКА(?:[ /]+МОДЕЛЬ)?|MAKE(?:[ /]+MODEL)?)\s*[:№.-]?\s*(.+)$/i);if(!m)continue;const value=m[1]||lines[i+1];const words=(value||'').trim().split(/\s+/);if(words.length>=1&&words[0].length>1)candidate('марку',words[0],'inBrand');if(words.length>1)candidate('модель',words.slice(1).join(' '),'inModel');break}
- status.textContent='OCR: '+Math.round(confidence)+'% уверенности. '+(vins.length?'Варианты VIN показаны ниже. ':'VIN не найден. ')+'Не переносим данные автоматически: проверьте кандидатов по оригиналу. Если текст нечитаемый, попробуйте повернуть фото и выбрать отдельную область.';
+ const combined=results.map(x=>x.data.text||'').join('\n');
+ const similarLatin={'А':'A','В':'B','С':'C','Е':'E','Н':'H','К':'K','М':'M','О':'O','Р':'P','Т':'T','У':'Y','Х':'X'};
+ const normalizeVIN=value=>value.toUpperCase().replace(/[АВСЕНКМОРТУХ]/g,c=>similarLatin[c]||c).replace(/[^A-Z0-9]/g,'');
+ const vins=new Set();for(const line of combined.split(/\r?\n/)){for(const part of line.toUpperCase().split(/\s+/)){const candidateVIN=normalizeVIN(part);if(/^[A-HJ-NPR-Z0-9]{17}$/.test(candidateVIN)&&/[A-Z]/.test(candidateVIN)&&/[0-9]/.test(candidateVIN))vins.add(candidateVIN)}}
+ const foundPlate=new Set();const plateRegex=/[АВЕКМНОРСТУХABEKMHOPCTYX]\s*\d{3}\s*[АВЕКМНОРСТУХABEKMHOPCTYX]{2}\s*\d{2,3}/gi;
+ for(const match of combined.matchAll(plateRegex)){const plate=match[0].toUpperCase().replace(/\s/g,'').replace(/[ABEKMHOPCTYX]/g,c=>({'A':'А','B':'В','E':'Е','K':'К','M':'М','H':'Н','O':'О','P':'Р','C':'С','T':'Т','Y':'У','X':'Х'}[c]||c));foundPlate.add(plate)}
+ function candidate(title,value,target){const button=elt('button','Подставить '+title+': '+value);button.type='button';button.className='secondary';button.style.margin='5px';button.onclick=()=>{$(target).value=value;status.textContent='Значение подставлено. Проверьте по оригиналу документа.'};candidates.append(button)}
+ for(const vin of [...vins].slice(0,5))candidate('VIN',vin,'inVin');
+ for(const plate of [...foundPlate].slice(0,5))candidate('госномер',plate,'inPlate');
+ const lines=combined.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ for(let i=0;i<lines.length;i++){const m=lines[i].match(/(?:МАРКА(?:[ \/]+МОДЕЛЬ)?|MAKE(?:[ \/]+MODEL)?)\s*[:№.\-]?\s*(.+)$/i);if(!m)continue;const value=m[1]||lines[i+1];const words=(value||'').trim().split(/\s+/);if(words.length>=1&&words[0].length>1)candidate('марку',words[0],'inBrand');if(words.length>1)candidate('модель',words.slice(1).join(' '),'inModel');break}
+ status.textContent='OCR: '+Math.round(confidence)+'% уверенности (оценка движка, не точность). '+(vins.size?'Найдены кандидаты VIN: '+vins.size+'. ':'VIN не определён. ')+(foundPlate.size?'Госномера: '+foundPlate.size+'. ':'')+'Выберите подходящее значение и сверьте его с документом. Автоматической записи сомнительных данных нет.';
  }catch(e){status.textContent='Ошибка распознавания: '+(e?.message||String(e))+'. Данные можно внести вручную.'}
  finally{if(worker)await worker.terminate().catch(()=>{});ptsOcrBusy=false;btn.disabled=false}
 };
