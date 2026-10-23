@@ -478,6 +478,10 @@ class RepairOrderState(BaseModel):
 @app.get("/repairs")
 async def get_repairs(person=Depends(require_roles(*ROLES)),db=Depends(database)):
     async with db.acquire() as c:
+        if person["role"]=="mechanic":
+            return [dict(row) for row in await c.fetch("""SELECT id,order_number,brand,model,status,
+                         complaint,intake_condition,created_at,updated_at FROM repair_orders
+                         WHERE mechanic_id=$1 ORDER BY updated_at DESC LIMIT 300""",person["id"])]
         return [dict(row) for row in await c.fetch("""SELECT * FROM repair_orders
                         ORDER BY updated_at DESC LIMIT 300""")]
 
@@ -1184,6 +1188,16 @@ async def repair_statement(repair_id:uuid.UUID,person=Depends(require_roles(*ROL
     async with db.acquire() as c:
         order=await c.fetchrow("SELECT * FROM repair_orders WHERE id=$1",repair_id)
         if not order:raise HTTPException(404,"Заказ не найден")
+        if person["role"]=="mechanic":
+            if order["mechanic_id"]!=person["id"]:raise HTTPException(403,"Нет доступа к ремонту")
+            works=await c.fetch("""SELECT description,quantity,unit_price_rub FROM repair_work_items
+                WHERE repair_id=$1 ORDER BY created_at""",repair_id)
+            earnings=[{"description":w["description"],"quantity":w["quantity"],
+                "my_earnings_rub":(w["quantity"]*w["unit_price_rub"]*Decimal("0.40")).quantize(Decimal("0.01"))}
+                for w in works]
+            return {"order":{"id":order["id"],"order_number":order["order_number"],"brand":order["brand"],
+                "model":order["model"],"status":order["status"]},"works":earnings,
+                "my_earnings_total_rub":sum((w["my_earnings_rub"] for w in earnings),Decimal("0"))}
         works=await c.fetch("""SELECT description,quantity,unit_price_rub
               FROM repair_work_items WHERE repair_id=$1 ORDER BY created_at""",repair_id)
         parts=await c.fetch("""SELECT p.sku,p.name,p.sale_price,m.delta,m.reason
