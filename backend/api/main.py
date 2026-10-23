@@ -15,6 +15,7 @@ import jwt
 from jwt import InvalidTokenError
 from pwdlib import PasswordHash
 from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form, Response
+from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -99,6 +100,10 @@ class StorageDraft(BaseModel):
 @app.get("/")
 async def root():
     return {"app": "MOTO TECH Service API", "status": "online", "api_version": "0.4.0"}
+
+@app.get("/mechanic-workspace", include_in_schema=False)
+async def mechanic_workspace_page():
+    return FileResponse(Path(__file__).resolve().parents[2] / "docs" / "mechanic-workspace.html")
 
 @app.get("/health")
 async def health(db=Depends(database)):
