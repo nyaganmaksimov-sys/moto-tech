@@ -15,6 +15,7 @@ import jwt
 from jwt import InvalidTokenError
 from pwdlib import PasswordHash
 from fastapi import FastAPI, HTTPException, Depends, Header, UploadFile, File, Form, Response
+from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -99,6 +100,10 @@ class StorageDraft(BaseModel):
 @app.get("/")
 async def root():
     return {"app": "MOTO TECH Service API", "status": "online", "api_version": "0.4.0"}
+
+@app.get("/mechanic-workspace", include_in_schema=False)
+async def mechanic_workspace_page():
+    return FileResponse(Path(__file__).resolve().parents[2] / "docs" / "mechanic-workspace.html")
 
 @app.get("/health")
 async def health(db=Depends(database)):
@@ -478,6 +483,10 @@ class RepairOrderState(BaseModel):
 @app.get("/repairs")
 async def get_repairs(person=Depends(require_roles(*ROLES)),db=Depends(database)):
     async with db.acquire() as c:
+        if person["role"]=="mechanic":
+            return [dict(row) for row in await c.fetch("""SELECT id,order_number,brand,model,status,
+                         complaint,intake_condition,created_at,updated_at FROM repair_orders
+                         WHERE mechanic_id=$1 ORDER BY updated_at DESC LIMIT 300""",person["id"])]
         return [dict(row) for row in await c.fetch("""SELECT * FROM repair_orders
                         ORDER BY updated_at DESC LIMIT 300""")]
 
@@ -810,6 +819,7 @@ class PartRequestInput(BaseModel):
 
 class PartRequestStatus(BaseModel):
     status: str
+    comment: str | None = Field(default=None,max_length=3000)
 
 @app.get("/suppliers")
 async def suppliers_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
@@ -827,6 +837,10 @@ async def suppliers_create(payload:SupplierInput,
 @app.get("/parts-requests")
 async def parts_requests_list(person=Depends(require_roles(*ROLES)),db=Depends(database)):
     async with db.acquire() as c:
+        if person["role"]=="mechanic":
+            return [dict(r) for r in await c.fetch("""SELECT id,part_name,sku,quantity,repair_id,status,notes,
+                  manager_comment,created_at,updated_at FROM inventory_requests
+                  WHERE created_by=$1 ORDER BY created_at DESC LIMIT 300""",person["id"])]
         return [dict(r) for r in await c.fetch("""SELECT r.*,s.name AS supplier_name
           FROM inventory_requests r LEFT JOIN inventory_suppliers s ON s.id=r.supplier_id
           ORDER BY r.created_at DESC LIMIT 300""")]
@@ -835,28 +849,37 @@ async def parts_requests_list(person=Depends(require_roles(*ROLES)),db=Depends(d
 async def parts_requests_create(payload:PartRequestInput,
     person=Depends(require_roles(*ROLES)),db=Depends(database)):
     async with db.acquire() as c:
+        if person["role"]=="mechanic":
+            if not payload.repair_id:raise HTTPException(422,"Укажите назначенный ремонт")
+            assigned=await c.fetchval("""SELECT EXISTS(SELECT 1 FROM repair_orders
+                  WHERE id=$1 AND mechanic_id=$2)""",payload.repair_id,person["id"])
+            if not assigned:raise HTTPException(403,"Можно запросить запчасть только для своего ремонта")
+            if payload.supplier_id:raise HTTPException(403,"Поставщика выбирает руководство")
         try:
             return dict(await c.fetchrow("""INSERT INTO inventory_requests
               (part_name,sku,quantity,supplier_id,repair_id,notes,created_by)
               VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *""",payload.part_name.strip(),
-              payload.sku,payload.quantity,payload.supplier_id,payload.repair_id,
-              payload.notes,person["id"]))
+              payload.sku,payload.quantity,payload.supplier_id,payload.repair_id,payload.notes,person["id"]))
         except asyncpg.ForeignKeyViolationError:
-            raise HTTPException(422,"Поставщик или заказ-наряд не найден")
+            raise HTTPException(422,"Поставщик или ремонт не найден")
 
 @app.patch("/parts-requests/{request_id}/status")
 async def parts_requests_status(request_id:uuid.UUID,payload:PartRequestStatus,
     person=Depends(require_roles("owner_manager","manager","administrator")),db=Depends(database)):
-    transitions={"requested":{"ordered","cancelled"},"ordered":{"received","cancelled"},
-                 "received":set(),"cancelled":set()}
+    transitions={"requested":{"approved","ordered","rejected","cancelled"},
+          "approved":{"ordered","rejected","cancelled"},
+          "ordered":{"in_transit","received","cancelled"},
+          "in_transit":{"received","cancelled"},
+          "received":{"issued"},"issued":set(),"rejected":set(),"cancelled":set()}
     async with db.acquire() as c:
         async with c.transaction():
             row=await c.fetchrow("SELECT status FROM inventory_requests WHERE id=$1 FOR UPDATE",request_id)
             if not row:raise HTTPException(404,"Заявка не найдена")
             if payload.status not in transitions[row["status"]]:
                 raise HTTPException(409,"Недопустимый переход статуса")
-            updated=await c.fetchrow("""UPDATE inventory_requests
-              SET status=$2,updated_at=now() WHERE id=$1 RETURNING *""",request_id,payload.status)
+            updated=await c.fetchrow("""UPDATE inventory_requests SET status=$2,
+              manager_comment=$3,updated_at=now() WHERE id=$1 RETURNING *""",
+              request_id,payload.status,payload.comment)
     return dict(updated)
 
 class AppointmentInput(BaseModel):
@@ -1108,16 +1131,45 @@ class RepairWorkInput(BaseModel):
 @app.get("/repairs/mine")
 async def my_repairs(person=Depends(require_roles(*ROLES)),db=Depends(database)):
     async with db.acquire() as c:
-        return [dict(r) for r in await c.fetch("""SELECT * FROM repair_orders
-          WHERE mechanic_id=$1 ORDER BY updated_at DESC LIMIT 200""",person["id"])]
+        return [dict(r) for r in await c.fetch("""SELECT id,order_number,brand,model,status,
+             complaint,intake_condition,created_at,updated_at FROM repair_orders
+             WHERE mechanic_id=$1 ORDER BY updated_at DESC LIMIT 200""",person["id"])]
+
+@app.get("/mechanic/my-earnings")
+async def mechanic_my_earnings(person=Depends(require_roles("mechanic")),db=Depends(database)):
+    async with db.acquire() as c:
+        rows=await c.fetch("""SELECT o.id AS repair_id,o.order_number,o.brand,o.model,o.status,
+          w.id AS work_id,w.description,w.quantity,w.unit_price_rub
+          FROM repair_orders o LEFT JOIN repair_work_items w ON w.repair_id=o.id
+          WHERE o.mechanic_id=$1 ORDER BY o.updated_at DESC,w.created_at LIMIT 1000""",person["id"])
+    orders={}
+    for r in rows:
+        oid=str(r["repair_id"])
+        if oid not in orders:
+            orders[oid]={"repair_id":oid,"order_number":r["order_number"],"brand":r["brand"],
+             "model":r["model"],"status":r["status"],"my_earnings_rub":Decimal("0"),"works":[]}
+        if r["work_id"]:
+            earned=(r["quantity"]*r["unit_price_rub"]*Decimal("0.40")).quantize(Decimal("0.01"))
+            orders[oid]["works"].append({"id":str(r["work_id"]),"description":r["description"],
+               "quantity":r["quantity"],"my_earnings_rub":earned})
+            orders[oid]["my_earnings_rub"]+=earned
+    return {"orders":list(orders.values()),"my_earnings_total_rub":sum(
+        (o["my_earnings_rub"] for o in orders.values()),Decimal("0"))}
 
 @app.get("/repairs/{repair_id}/works")
 async def repair_work_list(repair_id:uuid.UUID,person=Depends(require_roles(*ROLES)),db=Depends(database)):
     async with db.acquire() as c:
         if not await c.fetchval("SELECT EXISTS(SELECT 1 FROM repair_orders WHERE id=$1)",repair_id):
             raise HTTPException(404,"Заказ не найден")
-        return [dict(r) for r in await c.fetch("""SELECT id,repair_id,description,quantity,unit_price_rub,created_at
-              FROM repair_work_items WHERE repair_id=$1 ORDER BY created_at""",repair_id)]
+        rows=await c.fetch("""SELECT id,repair_id,description,quantity,unit_price_rub,created_at
+              FROM repair_work_items WHERE repair_id=$1 ORDER BY created_at""",repair_id)
+        if person["role"]=="mechanic":
+            if not await c.fetchval("SELECT EXISTS(SELECT 1 FROM repair_orders WHERE id=$1 AND mechanic_id=$2)",repair_id,person["id"]):
+                raise HTTPException(403,"Нет доступа к этому ремонту")
+            return [{"id":r["id"],"description":r["description"],"quantity":r["quantity"],
+              "my_earnings_rub":(r["quantity"]*r["unit_price_rub"]*Decimal("0.40")).quantize(Decimal("0.01"))}
+              for r in rows]
+        return [dict(r) for r in rows]
 
 @app.post("/repairs/{repair_id}/works",status_code=201)
 async def repair_work_add(repair_id:uuid.UUID,payload:RepairWorkInput,
@@ -1142,6 +1194,16 @@ async def repair_statement(repair_id:uuid.UUID,person=Depends(require_roles(*ROL
     async with db.acquire() as c:
         order=await c.fetchrow("SELECT * FROM repair_orders WHERE id=$1",repair_id)
         if not order:raise HTTPException(404,"Заказ не найден")
+        if person["role"]=="mechanic":
+            if order["mechanic_id"]!=person["id"]:raise HTTPException(403,"Нет доступа к ремонту")
+            works=await c.fetch("""SELECT description,quantity,unit_price_rub FROM repair_work_items
+                WHERE repair_id=$1 ORDER BY created_at""",repair_id)
+            earnings=[{"description":w["description"],"quantity":w["quantity"],
+                "my_earnings_rub":(w["quantity"]*w["unit_price_rub"]*Decimal("0.40")).quantize(Decimal("0.01"))}
+                for w in works]
+            return {"order":{"id":order["id"],"order_number":order["order_number"],"brand":order["brand"],
+                "model":order["model"],"status":order["status"]},"works":earnings,
+                "my_earnings_total_rub":sum((w["my_earnings_rub"] for w in earnings),Decimal("0"))}
         works=await c.fetch("""SELECT description,quantity,unit_price_rub
               FROM repair_work_items WHERE repair_id=$1 ORDER BY created_at""",repair_id)
         parts=await c.fetch("""SELECT p.sku,p.name,p.sale_price,m.delta,m.reason

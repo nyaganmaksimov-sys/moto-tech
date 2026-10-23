@@ -177,6 +177,13 @@ async def run():
                 await connection.execute((base / "025_repair_photos.sql").read_text(encoding="utf-8"))
                 print("Applied: 025_repair_photos.sql")
             print("Repair photo schema checks passed")
+            if not await connection.fetchval("""SELECT EXISTS(
+                  SELECT 1 FROM information_schema.columns
+                  WHERE table_schema='public' AND table_name='inventory_requests'
+                    AND column_name='manager_comment')"""):
+                await connection.execute((base / "026_parts_request_workflow.sql").read_text(encoding="utf-8"))
+                print("Applied: 026_parts_request_workflow.sql")
+            print("Parts request workflow schema checks passed")
         finally:
             await connection.execute("SELECT pg_advisory_unlock(7251092026)")
     finally:
