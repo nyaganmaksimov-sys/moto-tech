@@ -1131,8 +1131,9 @@ class RepairWorkInput(BaseModel):
 @app.get("/repairs/mine")
 async def my_repairs(person=Depends(require_roles(*ROLES)),db=Depends(database)):
     async with db.acquire() as c:
-        return [dict(r) for r in await c.fetch("""SELECT * FROM repair_orders
-          WHERE mechanic_id=$1 ORDER BY updated_at DESC LIMIT 200""",person["id"])]
+        return [dict(r) for r in await c.fetch("""SELECT id,order_number,brand,model,status,
+             complaint,intake_condition,created_at,updated_at FROM repair_orders
+             WHERE mechanic_id=$1 ORDER BY updated_at DESC LIMIT 200""",person["id"])]
 
 @app.get("/mechanic/my-earnings")
 async def mechanic_my_earnings(person=Depends(require_roles("mechanic")),db=Depends(database)):
