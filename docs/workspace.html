@@ -300,8 +300,8 @@ const form=document.createElement('form');const kind=document.createElement('sel
    else if(title.includes('Согласование сметы'))section='Согласование';
    else if(title.includes('Оформление выдачи'))section='Документы';
    if(node.tagName==='BUTTON'&&/Удалить ошибочную заявку/.test(node.textContent||''))section='Дополнительные действия';
-   if(node.tagName==='FORM'&&node===costForm)section='Работы и запчасти';
-   if(node===search)section='Работы и запчасти';
+   if(typeof costForm!=='undefined'&&node.tagName==='FORM'&&node===costForm)section='Работы и запчасти';
+   if(typeof search!=='undefined'&&node===search)section='Работы и запчасти';
    if(node.classList?.contains('order-cost-line'))section='Работы и запчасти';
    if(node.tagName==='BUTTON'&&node.textContent==='Печать сметы')section='Работы и запчасти';
    if(node.tagName==='FORM'&&node.querySelector('button')?.textContent==='Сохранить согласование')section='Согласование';
