@@ -59,6 +59,7 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
  body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:12px}
 }
 .board-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.board-columns .card{padding:12px;min-height:140px}.board-columns p{padding:7px;border-bottom:1px solid #354050;font-size:13px}.repair-card{padding:14px!important;margin:10px 0;border:1px solid #354050;border-radius:12px;background:#191f29}.repair-card>details{margin-top:7px}.repair-card summary{cursor:pointer}.repair-card .repair-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.repair-card .repair-head strong{font-size:15px}.repair-card .repair-meta{margin:8px 0;color:#abb7c5;font-size:12px;line-height:1.6}.repair-card .repair-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.repair-card .repair-actions button{margin:0}.repair-card .repair-details{padding:8px 0}.repair-card .repair-details>details{margin:8px 0;padding:7px 9px;border:1px solid #354050;border-radius:7px}.repair-card .repair-mechanic{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.repair-card .repair-mechanic label{margin:0}.repair-card .repair-mechanic select{min-width:180px;max-width:300px;margin:0}.repair-card .repair-finance{font-size:13px;font-weight:600;color:#9ad8b3}@media(max-width:650px){.repair-card{padding:10px!important}.repair-card .repair-head{align-items:flex-start}.repair-card .repair-mechanic{display:block}.repair-card .repair-mechanic select{width:100%;max-width:none}}
+.repair-photo-strip{display:flex;gap:7px;overflow-x:auto;padding:7px 0;align-items:center;min-height:52px}.repair-photo-strip .repair-thumb{border:1px solid #465264;border-radius:8px;padding:0;overflow:hidden;flex:0 0 76px;width:76px;height:66px;position:relative;background:#222d39;cursor:pointer}.repair-thumb img{width:100%;height:100%;object-fit:cover}.repair-thumb span{position:absolute;bottom:0;left:0;right:0;background:#000a;font-size:10px;padding:2px;color:#fff}.repair-photo-empty{font-size:12px;color:#96a3b2}.repair-line{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #354050;padding:8px 2px;font-size:13px}.repair-line strong{white-space:nowrap}.repair-subtotals{display:grid;gap:4px;padding:10px 0;font-size:13px}.repair-subtotals div{display:flex;justify-content:space-between;gap:10px}.repair-subtotals .repair-pay{color:#8ed7b1;font-weight:700}
 </style></head><body>
 <header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1></header>
 <nav id="systemTabs" class="system-tabs hidden"><button id="openSystem" type="button" class="active">Главная</button><button id="openRepairs" type="button">Заказ-наряды и ремонт</button><button id="openStorage" type="button">Хранение мотоциклов</button><button id="openEmployees" type="button">Сотрудники</button><span id="staffMini" class="profile-mini"></span><button id="pinSettings" type="button">Настроить PIN</button><button id="navLogout" type="button">Выйти</button></nav>
@@ -679,10 +680,26 @@ async function addRepairWork(orderId){
  catch(err){status(err.message)}
 }
 async function showRepairWorks(orderId,holder){
- try{const rows=await request('/repairs/'+orderId+'/works');holder.replaceChildren();
- const heading=document.createElement('strong');heading.textContent='Работы по заказу';holder.append(heading);
- let total=0;for(const row of rows){const p=document.createElement('p');const sum=Number(row.quantity)*Number(row.unit_price_rub);total+=sum;p.textContent=row.description+' · '+row.quantity+' × '+row.unit_price_rub+' ₽ = '+sum.toFixed(2)+' ₽';holder.append(p)}
- const summary=document.createElement('p');summary.textContent='Стоимость работ: '+total.toFixed(2)+' ₽';holder.append(summary)
+ holder.textContent='Загрузка работ…';
+ try{
+  const rows=await request('/repairs/'+orderId+'/works');holder.replaceChildren();
+  const heading=document.createElement('strong');heading.textContent='Выполняемые работы';holder.append(heading);
+  let total=0;
+  for(const row of rows){
+   const line=document.createElement('div');line.className='repair-line';
+   const desc=document.createElement('span');desc.textContent=row.description+' · '+row.quantity+' шт.';
+   const sum=Number(row.quantity)*Number(row.unit_price_rub);total+=sum;
+   const price=document.createElement('strong');price.textContent=sum.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';
+   line.append(desc,price);holder.append(line);
+  }
+  if(!rows.length){const empty=document.createElement('p');empty.textContent='Работы ещё не добавлены';holder.append(empty)}
+  const totals=document.createElement('div');totals.className='repair-subtotals';
+  const gross=document.createElement('div');const gt=document.createElement('span');gt.textContent='Сумма работ';const gv=document.createElement('strong');gv.textContent=total.toFixed(2)+' ₽';gross.append(gt,gv);totals.append(gross);
+  if(['owner_manager','manager','administrator','mechanic'].includes(staffRole)){
+   const earning=document.createElement('div');earning.className='repair-pay';
+   const label=document.createElement('span');label.textContent='Механику 40% от работ';const value=document.createElement('strong');value.textContent=(total*.4).toFixed(2)+' ₽';earning.append(label,value);totals.append(earning);
+  }
+  holder.append(totals);
  }catch(err){holder.textContent='Ошибка загрузки работ: '+err.message}
 }
 async function showRepairStatement(orderId,holder){
@@ -799,8 +816,28 @@ async function refreshRepairs(){
   inspectionForm.onsubmit=async ev=>{ev.preventDefault();saveInspection.disabled=true;const payload=Object.fromEntries(new FormData(inspectionForm).entries());payload.mileage_km=payload.mileage_km===''?null:Number(payload.mileage_km);try{await request('/repairs/'+item.id+'/inspection',{method:'PATCH',body:payload});await refreshRepairs();status('Осмотр сохранён в заказ-наряде')}catch(err){status(err.message);saveInspection.disabled=false}};
   inspection.append(inspectionForm);extra.append(inspection);
   const photos=document.createElement('details');const phTitle=document.createElement('summary');phTitle.textContent='Фото осмотра и повреждений';photos.append(phTitle);
+  const preview=document.createElement('div');preview.className='repair-photo-strip';const previewEmpty=document.createElement('span');previewEmpty.className='repair-photo-empty';previewEmpty.textContent='Фото техники загружаются при открытии карточки';preview.append(previewEmpty);container.append(preview);
   const phList=document.createElement('div');photos.append(phList);
-  async function loadRepairPhotos(){const rows=await request('/repairs/'+item.id+'/photos');phList.replaceChildren();for(const p of rows){const btn=document.createElement('button');btn.type='button';btn.textContent=({front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',vin:'VIN',damage:'Повреждение',other:'Другое'}[p.kind]||p.kind)+' · '+(p.note||new Date(p.created_at).toLocaleString('ru-RU'));btn.onclick=async()=>{try{const response=await fetch(base+'/repairs/'+item.id+'/photos/'+p.id,{headers:{Authorization:'Bearer '+token}});if(!response.ok)throw Error('Фото недоступно');const blob=await response.blob(),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(e){status(e.message)}};phList.append(btn)}if(!rows.length)phList.textContent='Фотографий пока нет'}
+  async function loadRepairPhotos(){
+ const rows=await request('/repairs/'+item.id+'/photos');phList.replaceChildren();preview.replaceChildren();
+ for(const p of rows){
+  const label=({front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',vin:'VIN',damage:'Повреждение',other:'Другое'}[p.kind]||p.kind);
+  const openPhoto=async()=>{try{const response=await fetch(base+'/repairs/'+item.id+'/photos/'+p.id,{headers:{Authorization:'Bearer '+token}});if(!response.ok)throw Error('Фото недоступно');const blob=await response.blob(),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(e){status(e.message)}};
+  const btn=document.createElement('button');btn.type='button';btn.textContent=label+' · '+(p.note||new Date(p.created_at).toLocaleString('ru-RU'));btn.onclick=openPhoto;phList.append(btn);
+  if(['front','rear','left','right'].includes(p.kind)){
+   const thumb=document.createElement('button');thumb.type='button';thumb.className='repair-thumb';thumb.setAttribute('aria-label','Открыть фото: '+label);
+   const img=document.createElement('img');img.alt=label;img.loading='lazy';const caption=document.createElement('span');caption.textContent=label;thumb.append(img,caption);
+   thumb.onclick=openPhoto;preview.append(thumb);
+   fetch(base+'/repairs/'+item.id+'/photos/'+p.id,{headers:{Authorization:'Bearer '+token}})
+    .then(response=>{if(!response.ok)throw Error('Фото недоступно');return response.blob()})
+    .then(blob=>{if(!thumb.isConnected)return;const url=URL.createObjectURL(blob);img.src=url;img.onload=()=>setTimeout(()=>URL.revokeObjectURL(url),60000);img.onerror=()=>URL.revokeObjectURL(url)})
+    .catch(()=>{thumb.textContent=label});
+  }
+ }
+ if(!rows.length)phList.textContent='Фотографий пока нет';
+ if(!preview.children.length){const empty=document.createElement('span');empty.className='repair-photo-empty';empty.textContent='Нет обзорных фото — откройте «Осмотр, фотографии и дополнительные действия»';preview.append(empty)}
+}
+loadRepairPhotos().catch(err=>{preview.textContent='Фото временно недоступны';});
   photos.ontoggle=()=>{if(photos.open)loadRepairPhotos().catch(e=>status(e.message))};
   const phForm=document.createElement('form');const phKind=document.createElement('select');for(const [k,v] of [['front','Спереди'],['rear','Сзади'],['left','Слева'],['right','Справа'],['vin','VIN'],['damage','Повреждение'],['other','Другое']])phKind.add(new Option(v,k));
   const phNote=document.createElement('input');phNote.placeholder='Описание повреждения или примечание';const phFile=document.createElement('input');phFile.type='file';phFile.accept='image/*';phFile.required=true;const phUpload=document.createElement('button');phUpload.type='submit';phUpload.textContent='Загрузить фото';phUpload.disabled=['issued','cancelled'].includes(item.status);
