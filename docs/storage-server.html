@@ -837,7 +837,7 @@ async function refreshRepairs(){
  if(!rows.length)phList.textContent='Фотографий пока нет';
  if(!preview.children.length){const empty=document.createElement('span');empty.className='repair-photo-empty';empty.textContent='Нет обзорных фото — откройте «Осмотр, фотографии и дополнительные действия»';preview.append(empty)}
 }
-loadRepairPhotos().catch(err=>{preview.textContent='Фото временно недоступны';});
+if('IntersectionObserver' in window){const observer=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)){observer.disconnect();loadRepairPhotos().catch(()=>{preview.textContent='Фото временно недоступны'})}},{rootMargin:'180px'});observer.observe(container)}else{loadRepairPhotos().catch(()=>{preview.textContent='Фото временно недоступны'})}
   photos.ontoggle=()=>{if(photos.open)loadRepairPhotos().catch(e=>status(e.message))};
   const phForm=document.createElement('form');const phKind=document.createElement('select');for(const [k,v] of [['front','Спереди'],['rear','Сзади'],['left','Слева'],['right','Справа'],['vin','VIN'],['damage','Повреждение'],['other','Другое']])phKind.add(new Option(v,k));
   const phNote=document.createElement('input');phNote.placeholder='Описание повреждения или примечание';const phFile=document.createElement('input');phFile.type='file';phFile.accept='image/*';phFile.required=true;const phUpload=document.createElement('button');phUpload.type='submit';phUpload.textContent='Загрузить фото';phUpload.disabled=['issued','cancelled'].includes(item.status);
