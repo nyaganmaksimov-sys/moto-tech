@@ -58,7 +58,8 @@ body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:270px}
  body:has(#mainSidebar:not(.hidden)) #fleetScreen,body:has(#mainSidebar:not(.hidden)) #employeesScreen,body:has(#mainSidebar:not(.hidden)) #fullSystem,body:has(#mainSidebar:not(.hidden)) main{margin-left:0}
  body:has(#mainSidebar:not(.hidden)) #systemTabs{padding-left:12px}
 }
-.board-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.board-columns .card{padding:12px;min-height:140px}.board-columns p{padding:7px;border-bottom:1px solid #354050;font-size:13px}</style></head><body>
+.board-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.board-columns .card{padding:12px;min-height:140px}.board-columns p{padding:7px;border-bottom:1px solid #354050;font-size:13px}.repair-card{padding:14px!important;margin:10px 0;border:1px solid #354050;border-radius:12px;background:#191f29}.repair-card>details{margin-top:7px}.repair-card summary{cursor:pointer}.repair-card .repair-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.repair-card .repair-head strong{font-size:15px}.repair-card .repair-meta{margin:8px 0;color:#abb7c5;font-size:12px;line-height:1.6}.repair-card .repair-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px}.repair-card .repair-actions button{margin:0}.repair-card .repair-details{padding:8px 0}.repair-card .repair-details>details{margin:8px 0;padding:7px 9px;border:1px solid #354050;border-radius:7px}.repair-card .repair-mechanic{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.repair-card .repair-mechanic label{margin:0}.repair-card .repair-mechanic select{min-width:180px;max-width:300px;margin:0}.repair-card .repair-finance{font-size:13px;font-weight:600;color:#9ad8b3}@media(max-width:650px){.repair-card{padding:10px!important}.repair-card .repair-head{align-items:flex-start}.repair-card .repair-mechanic{display:block}.repair-card .repair-mechanic select{width:100%;max-width:none}}
+</style></head><body>
 <header id="appHeader"><h1><span class="brand">MOTO TECH</span><span class="header-divider">/</span><span id="headerSub">Сервисная платформа</span></h1></header>
 <nav id="systemTabs" class="system-tabs hidden"><button id="openSystem" type="button" class="active">Главная</button><button id="openRepairs" type="button">Заказ-наряды и ремонт</button><button id="openStorage" type="button">Хранение мотоциклов</button><button id="openEmployees" type="button">Сотрудники</button><span id="staffMini" class="profile-mini"></span><button id="pinSettings" type="button">Настроить PIN</button><button id="navLogout" type="button">Выйти</button></nav>
 <aside id="mainSidebar" class="hidden" aria-label="Разделы MOTO TECH">
@@ -698,6 +699,7 @@ async function showRepairStatement(orderId,holder){
    'Запчасти: '+Number(t.parts).toFixed(2)+' ₽',
    'Итого: '+Number(t.payable).toFixed(2)+' ₽'
   ];
+  if(['owner_manager','manager','administrator'].includes(staffRole))lines.push('Начисление механику (40% только от работ): '+(Number(t.works)*0.40).toFixed(2)+' ₽');
   if(t.paid!==null){lines.push('Учтённые оплаты: '+Number(t.paid).toFixed(2)+' ₽');lines.push('Остаток: '+Number(t.balance).toFixed(2)+' ₽')}
   for(const line of lines){const p=document.createElement('p');p.textContent=line;holder.append(p)}
   const note=document.createElement('small');note.textContent=data.note;holder.append(note);
@@ -768,16 +770,16 @@ async function refreshRepairs(){
  const box=$('repairItems');box.replaceChildren();
  if(!orders.length){box.textContent='Заказов пока нет';return}
  for(const item of orders){
-  const container=document.createElement('div');container.id='repair-'+item.id;container.dataset.repairId=item.id;container.style.padding='10px 0';container.style.borderBottom='1px solid #394352';
-  const heading=document.createElement('div');heading.textContent=item.order_number+' · '+item.brand+' '+item.model+' · '+item.client_name;
-  const detail=document.createElement('small');detail.textContent=repairStatusRu[item.status]||item.status;
+  const container=document.createElement('div');container.id='repair-'+item.id;container.dataset.repairId=item.id;container.style.padding='10px 0';container.style.borderBottom='1px solid #394352';container.classList.add('repair-card');
+  const heading=document.createElement('div');heading.className='repair-head';const title=document.createElement('strong');title.textContent=item.order_number+' · '+item.brand+' '+item.model;const state=document.createElement('span');state.textContent=repairStatusRu[item.status]||item.status;heading.append(title,state);
+  const detail=document.createElement('div');detail.className='repair-meta';detail.textContent='Клиент: '+(item.client_name||'—')+' · VIN: '+(item.vin||'не указан')+' · Пробег: '+(item.mileage_km??'—')+' км'+(item.complaint?' · Жалоба: '+item.complaint:'');
   const select=document.createElement('select');select.style.marginTop='8px';select.setAttribute('aria-label','Изменить статус '+item.order_number);
   const transitions={accepted:['diagnostics','cancelled'],diagnostics:['repair','ready','cancelled'],repair:['ready','cancelled'],ready:['issued','repair'],issued:[],cancelled:[]};
   for(const st of [item.status,...transitions[item.status]]){
    const op=document.createElement('option');op.value=st;op.textContent=repairStatusRu[st];select.append(op)
   }
   select.onchange=async()=>{try{await request('/repairs/'+item.id+'/status',{method:'PATCH',body:{status:select.value,version:item.version}});await refreshRepairs();status('Статус заказа обновлён на сервере.')}catch(e){status(e.message);await refreshRepairs()}};
-  container.append(heading,detail,select);
+  const topControls=document.createElement('div');topControls.className='repair-mechanic';const statusLabel=document.createElement('label');statusLabel.textContent='Статус';topControls.append(statusLabel,select);container.append(heading,detail,topControls);
   if(['owner_manager','administrator','manager'].includes(staffRole)&&!['issued','cancelled'].includes(item.status)){
    const label=document.createElement('label');label.textContent='Ответственный механик';
    const mechanic=document.createElement('select');mechanic.setAttribute('aria-label','Механик '+item.order_number);
@@ -789,20 +791,20 @@ async function refreshRepairs(){
     try{await request('/repairs/'+item.id+'/mechanic',{method:'PATCH',body:{mechanic_id:mechanic.value||null,version:item.version}});await refreshRepairs();status('Ответственный за ремонт назначен')}
     catch(err){status(err.message);await refreshRepairs()}
    };
-   container.append(label,mechanic)
+   topControls.append(label,mechanic)
   }
-  const inspection=document.createElement('details');const inspectionHeader=document.createElement('summary');inspectionHeader.textContent='Осмотр при приёмке';inspection.append(inspectionHeader);
+  const extra=document.createElement('details');extra.className='repair-details';const extraTitle=document.createElement('summary');extraTitle.textContent='Осмотр, фотографии и дополнительные действия';extra.append(extraTitle);const inspection=document.createElement('details');const inspectionHeader=document.createElement('summary');inspectionHeader.textContent='Осмотр при приёмке';inspection.append(inspectionHeader);
   const inspectionForm=document.createElement('form');for(const [name,label,value] of [['intake_condition','Состояние при приёмке',item.intake_condition],['damage_description','Повреждения',item.damage_description],['accessories_received','Комплектация / переданные принадлежности',item.accessories_received],['fuel_level','Уровень топлива',item.fuel_level],['mileage_km','Пробег (км)',item.mileage_km]]){const lbl=document.createElement('label');lbl.textContent=label;const input=name==='mileage_km'?document.createElement('input'):document.createElement('textarea');input.name=name;input.value=value??'';if(name==='mileage_km'){input.type='number';input.min='0';input.step='1'}inspectionForm.append(lbl,input)}
   const saveInspection=document.createElement('button');saveInspection.type='submit';saveInspection.textContent='Сохранить осмотр';saveInspection.disabled=['issued','cancelled'].includes(item.status);inspectionForm.append(saveInspection);
   inspectionForm.onsubmit=async ev=>{ev.preventDefault();saveInspection.disabled=true;const payload=Object.fromEntries(new FormData(inspectionForm).entries());payload.mileage_km=payload.mileage_km===''?null:Number(payload.mileage_km);try{await request('/repairs/'+item.id+'/inspection',{method:'PATCH',body:payload});await refreshRepairs();status('Осмотр сохранён в заказ-наряде')}catch(err){status(err.message);saveInspection.disabled=false}};
-  inspection.append(inspectionForm);container.append(inspection);
+  inspection.append(inspectionForm);extra.append(inspection);
   const photos=document.createElement('details');const phTitle=document.createElement('summary');phTitle.textContent='Фото осмотра и повреждений';photos.append(phTitle);
   const phList=document.createElement('div');photos.append(phList);
   async function loadRepairPhotos(){const rows=await request('/repairs/'+item.id+'/photos');phList.replaceChildren();for(const p of rows){const btn=document.createElement('button');btn.type='button';btn.textContent=({front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',vin:'VIN',damage:'Повреждение',other:'Другое'}[p.kind]||p.kind)+' · '+(p.note||new Date(p.created_at).toLocaleString('ru-RU'));btn.onclick=async()=>{try{const response=await fetch(base+'/repairs/'+item.id+'/photos/'+p.id,{headers:{Authorization:'Bearer '+token}});if(!response.ok)throw Error('Фото недоступно');const blob=await response.blob(),url=URL.createObjectURL(blob);window.open(url,'_blank');setTimeout(()=>URL.revokeObjectURL(url),60000)}catch(e){status(e.message)}};phList.append(btn)}if(!rows.length)phList.textContent='Фотографий пока нет'}
   photos.ontoggle=()=>{if(photos.open)loadRepairPhotos().catch(e=>status(e.message))};
   const phForm=document.createElement('form');const phKind=document.createElement('select');for(const [k,v] of [['front','Спереди'],['rear','Сзади'],['left','Слева'],['right','Справа'],['vin','VIN'],['damage','Повреждение'],['other','Другое']])phKind.add(new Option(v,k));
   const phNote=document.createElement('input');phNote.placeholder='Описание повреждения или примечание';const phFile=document.createElement('input');phFile.type='file';phFile.accept='image/*';phFile.required=true;const phUpload=document.createElement('button');phUpload.type='submit';phUpload.textContent='Загрузить фото';phUpload.disabled=['issued','cancelled'].includes(item.status);
-  phForm.append(phKind,phNote,phFile,phUpload);phForm.onsubmit=async e=>{e.preventDefault();if(!phFile.files[0])return;const form=new FormData();form.append('kind',phKind.value);form.append('note',phNote.value);form.append('photo',phFile.files[0]);phUpload.disabled=true;try{await request('/repairs/'+item.id+'/photos',{method:'POST',form});phForm.reset();await loadRepairPhotos();status('Фото сохранено')}catch(err){status(err.message)}finally{phUpload.disabled=false}};photos.append(phForm);container.append(photos);
+  phForm.append(phKind,phNote,phFile,phUpload);phForm.onsubmit=async e=>{e.preventDefault();if(!phFile.files[0])return;const form=new FormData();form.append('kind',phKind.value);form.append('note',phNote.value);form.append('photo',phFile.files[0]);phUpload.disabled=true;try{await request('/repairs/'+item.id+'/photos',{method:'POST',form});phForm.reset();await loadRepairPhotos();status('Фото сохранено')}catch(err){status(err.message)}finally{phUpload.disabled=false}};photos.append(phForm);extra.append(photos);
   const worksBtn=document.createElement('button');worksBtn.type='button';worksBtn.textContent='Работы и стоимость';const workPanel=document.createElement('div');worksBtn.onclick=()=>showRepairWorks(item.id,workPanel);
   const addWork=document.createElement('button');addWork.type='button';addWork.textContent='Добавить работу';addWork.disabled=['issued','cancelled'].includes(item.status);addWork.onclick=()=>addRepairWork(item.id);
   const estimateBtn=document.createElement('button');estimateBtn.type='button';estimateBtn.textContent='Расчёт заказа';const estimate=document.createElement('div');estimateBtn.onclick=()=>showRepairStatement(item.id,estimate);
@@ -818,12 +820,12 @@ async function refreshRepairs(){
    const reload=async()=>{const doc=await request('/repairs/'+item.id+'/statement');const t=doc.totals;payInfo.textContent='Итого: '+Number(t.payable).toFixed(2)+' ₽ · Оплачено: '+Number(t.paid).toFixed(2)+' ₽ · Остаток: '+Number(t.balance).toFixed(2)+' ₽'};
    payPanel.ontoggle=()=>{if(payPanel.open)reload().catch(e=>status(e.message))};
    payForm.onsubmit=async e=>{e.preventDefault();save.disabled=true;try{await request('/finance',{method:'POST',body:{entry_type:'income',amount_rub:Number(amount.value),category:'Оплата ремонта',description:'Способ: '+({cash:'наличные',card:'карта',transfer:'перевод'}[method.value])+(description.value?' · '+description.value:''),repair_id:item.id}});payForm.reset();await reload();status('Оплата учтена по заказ-наряду')}catch(err){status(err.message)}finally{save.disabled=false}};
-   container.append(payPanel)
+   extra.append(payPanel)
   }
   const taskBtn=document.createElement('button');taskBtn.type='button';taskBtn.textContent='Поставить задачу по ремонту';taskBtn.onclick=()=>openCrmFor('repair',item.id);
   const history=document.createElement('details');const summary=document.createElement('summary');summary.textContent='История заказ-наряда';history.append(summary);
   const historyRows=document.createElement('div');history.append(historyRows);history.ontoggle=async()=>{if(!history.open)return;try{const rows=await request('/repairs/'+item.id+'/events');historyRows.replaceChildren();for(const ev of rows){const p=document.createElement('p');const changes=ev.event_type==='status_changed'?' · '+(repairStatusRu[ev.payload.from]||ev.payload.from)+' → '+(repairStatusRu[ev.payload.to]||ev.payload.to):'';p.textContent=new Date(ev.happened_at).toLocaleString('ru-RU')+' · '+ev.actor_name+' · '+({created:'Заказ создан',work_added:'Добавлена работа',status_changed:'Статус изменён',mechanic_assigned:'Назначен механик',inspection_updated:'Обновлён осмотр'}[ev.event_type]||ev.event_type)+changes;historyRows.append(p)}if(!rows.length)historyRows.textContent='История пуста'}catch(err){historyRows.textContent=err.message}};
-  container.append(worksBtn,addWork,workPanel,estimateBtn,estimate,qrBtn,taskBtn,history);box.append(container)
+  const actions=document.createElement('div');actions.className='repair-actions';actions.append(worksBtn,addWork,estimateBtn);container.append(actions,workPanel,estimate);extra.append(qrBtn,taskBtn,history);container.append(extra);box.append(container)
  }
  applyRepairFilters();
 }
