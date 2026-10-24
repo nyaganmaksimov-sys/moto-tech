@@ -709,6 +709,11 @@ async function showRepairStatement(orderId,holder){
   holder.replaceChildren();
   const order=data.order,t=data.totals;
   const h=document.createElement('h3');h.textContent='Заказ '+order.order_number;holder.append(h);
+  const details=document.createElement('div');details.className='repair-cost-breakdown';
+  function drawLine(label,value){const line=document.createElement('div');line.className='repair-line';const name=document.createElement('span');name.textContent=label;const amount=document.createElement('strong');amount.textContent=Number(value||0).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₽';line.append(name,amount);details.append(line)}
+  if(Array.isArray(data.works)&&data.works.length){const title=document.createElement('strong');title.textContent='Работы';details.append(title);for(const w of data.works)drawLine(w.description+' · '+w.quantity+' шт.',Number(w.quantity)*Number(w.unit_price_rub))}
+  if(Array.isArray(data.parts)&&data.parts.length){const title=document.createElement('strong');title.textContent='Запчасти';details.append(title);for(const p of data.parts)drawLine(p.name+' · '+Math.abs(Number(p.delta))+' шт.',Math.abs(Number(p.delta))*Number(p.sale_price))}
+  holder.append(details);
   const lines=[
    'Клиент: '+order.client_name,
    'Техника: '+order.brand+' '+order.model,
