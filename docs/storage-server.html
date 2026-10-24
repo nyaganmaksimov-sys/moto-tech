@@ -720,10 +720,10 @@ async function showRepairStatement(orderId,holder){
   if(t.paid!==null){lines.push('Учтённые оплаты: '+Number(t.paid).toFixed(2)+' ₽');lines.push('Остаток: '+Number(t.balance).toFixed(2)+' ₽')}
   for(const line of lines){const p=document.createElement('p');p.textContent=line;holder.append(p)}
   const note=document.createElement('small');note.textContent=data.note;holder.append(note);
-  const print=document.createElement('button');print.type='button';print.textContent='Печать расчёта';print.onclick=()=>{
+  const print=document.createElement('button');print.type='button';print.textContent='Печать для клиента';print.onclick=()=>{
     const section=document.createElement('section');section.style.cssText='font:16px Arial,sans-serif;color:black;background:white;padding:30px';
     const title=document.createElement('h2');title.textContent='MOTO TECH · Предварительный расчёт '+order.order_number;section.append(title);
-    for(const line of lines){const p=document.createElement('p');p.textContent=line;section.append(p)}
+    for(const line of lines.filter(x=>!x.startsWith('Начисление механику'))){const p=document.createElement('p');p.textContent=line;section.append(p)}
     const n=document.createElement('p');n.textContent=data.note;section.append(n);
     const win=window.open('','_blank');if(!win){status('Разрешите всплывающие окна для печати');return}
     win.document.title='Расчёт '+order.order_number;win.document.body.append(section);win.print();
