@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MOTO TECH — серверное хранение (тест)</title>
+<style>
+:root{font:15px system-ui,Arial;background:#0e1117;color:#ebedf5}*{box-sizing:border-box}body{margin:0}header{padding:18px 24px;background:#171b23;border-bottom:1px solid #343a46;display:flex;justify-content:space-between;align-items:center}h1{font-size:22px;margin:0}.brand{color:#f04b50}main{max-width:1100px;margin:auto;padding:20px}.card{border:1px solid #333c49;background:#1b2029;padding:20px;border-radius:12px;margin-bottom:18px}label{display:block;color:#aab5c4;margin:10px 0 5px;font-size:13px}input,textarea,select{width:100%;padding:11px;background:#10141b;color:#fff;border:1px solid #404a58;border-radius:8px;font:inherit}textarea{min-height:80px}button{background:#313946;color:#fff;border:1px solid #475160;padding:10px 14px;border-radius:8px;cursor:pointer}button.primary{background:#d53e46;border-color:#d53e46}.row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.row>*{flex:1;min-width:180px}.muted{color:#a5afbd}.notice{color:#f3c978}.hidden{display:none}.items button{width:100%;text-align:left;margin:5px 0}#status{white-space:pre-wrap;padding:12px 0}.gallery{display:flex;flex-wrap:wrap;gap:8px}.gallery span{padding:7px;border:1px solid #465264;border-radius:6px}small{color:#a6b1c0}a{color:#f6a2a5}
+</style></head><body>
+<header><h1><span class="brand">MOTO TECH</span> / Серверное хранение</h1><a href="./index.html">← Основная система</a></header>
+<main>
+<p class="notice">Тестовый интерфейс. Используйте только защищённый HTTPS-сервер MOTO TECH. Сведения о клиентах не вводите до проверки развёртывания и защиты данных. Демо из основной системы сюда автоматически не переносится.</p>
+<section class="card" id="signIn">
+<h2>Вход сотрудника</h2><div class="row"><div><label>Адрес API (HTTPS)</label><input id="api" placeholder="https://api.example.ru" autocomplete="url"></div><div><label>Логин</label><input id="username" autocomplete="username"></div><div><label>Пароль</label><input id="password" type="password" autocomplete="current-password"></div></div>
+<p><button class="primary" id="login">Войти</button></p>
+</section>
+<section class="card hidden" id="workspace">
+<div class="row"><h2 id="profile">Хранение</h2><button id="logout">Выйти</button><button id="refresh">Обновить список</button></div>
+<div class="row"><div><h3>Карточки</h3><div id="records" class="items"></div></div>
+<div><h3>Новая карточка (черновик)</h3><form id="create">
+<label>Номер договора</label><input name="contract_number" required maxlength="80">
+<label>ФИО владельца</label><input name="owner_name" required maxlength="250">
+<label>Телефон</label><input name="owner_phone" maxlength="80">
+<label>VIN / номер рамы</label><input name="vin" required maxlength="64">
+<label>Марка и модель</label><input name="brand_model" required maxlength="200">
+<label>Место хранения</label><input name="location_label" maxlength="100">
+<label>Тариф, ₽ / месяц</label><input name="monthly_rate_rub" type="number" min="0" step="0.01" value="0" required>
+<label>Состояние кузова / пластика</label><textarea name="body_condition" required></textarea>
+<label>Описание повреждений (при наличии)</label><textarea name="damage_description"></textarea>
+<p><button class="primary" type="submit">Сохранить черновик</button></p></form></div></div>
+</section>
+<section class="card hidden" id="detail">
+<h2 id="detailName"></h2><p id="detailMeta" class="muted"></p>
+<p>Для приёмки нужны фото: спереди, сзади, слева, справа и VIN. Повреждения снимайте отдельно.</p>
+<form id="upload"><div class="row"><div><label>Тип фотографии</label><select name="kind"><option value="front">Спереди</option><option value="rear">Сзади</option><option value="left">Слева</option><option value="right">Справа</option><option value="vin">VIN</option><option value="dashboard">Приборная панель</option><option value="damage">Повреждение</option><option value="pts">ПТС</option><option value="other">Другое</option></select></div>
+<div><label>Описание / место повреждения</label><input name="note" maxlength="2000"></div><div><label>Фото</label><input type="file" name="photo" accept="image/jpeg,image/png,image/webp" required></div></div>
+<p><button type="submit">Добавить фото</button></p></form>
+<div class="gallery" id="photos"></div><p id="missing" class="notice"></p>
+<div id="acceptBlock"><label><input id="confirmed" type="checkbox" style="width:auto"> Я проверил состояние мотоцикла и обязательные фотографии</label><p><button class="primary" id="accept">Завершить приёмку</button></p></div>
+<div id="returnBlock" class="hidden"><label>Примечание к запросу выдачи</label><textarea id="returnNote"></textarea><button id="requestReturn">Запросить возврат</button></div>
+<div id="handoverBlock" class="hidden"><label>ФИО получателя</label><input id="recipient"><label>Состояние техники при выдаче</label><textarea id="returnCondition"></textarea><label><input type="checkbox" id="keys" style="width:auto"> Все ключи переданы</label><label><input type="checkbox" id="documents" style="width:auto"> Все документы переданы</label><p><button class="primary" id="handover">Подтвердить выдачу</button></p></div>
+</section><p id="status" role="status" aria-live="polite"></p></main>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let base='',token='',current=null;
+function status(message){$('status').textContent=message}
+function setSignedIn(on){$('signIn').classList.toggle('hidden',on);$('workspace').classList.toggle('hidden',!on);if(!on){$('detail').classList.add('hidden');current=null}}
+async function request(path,{method='GET',body,form}={}){
+ const headers={Authorization:'Bearer '+token};if(body!==undefined)headers['Content-Type']='application/json';
+ let response;
+ try{response=await fetch(base+path,{method,headers,body:form|| (body===undefined?undefined:JSON.stringify(body)),cache:'no-store'})}
+ catch(e){throw new Error('Нет соединения с API. Проверьте HTTPS и CORS.')}
+ let result=await response.json().catch(()=>({detail:'Ошибка ответа сервера'}));
+ if(!response.ok){if(response.status===401){token='';setSignedIn(false)}throw new Error(typeof result.detail==='string'?result.detail:'Ошибка API: '+response.status)}
+ return result;
+}
+$('login').onclick=async()=>{
+ try{
+  const url=new URL($('api').value.trim());if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash)throw Error('Укажите HTTPS-адрес API без дополнительных параметров');
+  base=url.origin+url.pathname.replace(/\/$/,'');const username=$('username').value.trim();const password=$('password').value;
+  const response=await fetch(base+'/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password}),cache:'no-store'});
+  const data=await response.json();if(!response.ok)throw Error(data.detail||'Неверные учётные данные');
+  token=data.access_token;$('password').value='';setSignedIn(true);
+  const me=await request('/auth/me');$('profile').textContent=me.full_name+' · '+me.role;
+  await refresh();status('Вход выполнен. Данные загружаются с сервера.');
+ }catch(e){token='';setSignedIn(false);status(e.message)}
+};
+$('logout').onclick=()=>{token='';setSignedIn(false);status('Сеанс завершён')};
+async function refresh(){
+ const rows=await request('/storage');$('records').replaceChildren();
+ if(!rows.length)$('records').textContent='Карточек пока нет';
+ rows.forEach(item=>{let b=document.createElement('button');b.textContent=item.contract_number+' · '+item.brand_model+' · '+item.status;b.onclick=()=>openRecord(item.id);$('records').append(b)});
+}
+$('refresh').onclick=()=>refresh().catch(e=>status(e.message));
+$('create').onsubmit=async e=>{
+ e.preventDefault();try{
+ const data=Object.fromEntries(new FormData(e.target).entries());data.monthly_rate_rub=Number(data.monthly_rate_rub);
+ const item=await request('/storage',{method:'POST',body:data});e.target.reset();await refresh();await openRecord(item.id);status('Черновик создан. Добавьте фотографии, затем подтвердите приёмку.');
+ }catch(err){status(err.message)}
+};
+const required=['front','rear','left','right','vin'];
+async function openRecord(id){
+ try{
+  current=await request('/storage/'+encodeURIComponent(id));$('detail').classList.remove('hidden');
+  $('detailName').textContent='Договор '+current.contract_number+' · '+current.brand_model;
+  $('detailMeta').textContent=current.status+' · VIN '+current.vin+' · версия '+current.version;
+  $('photos').replaceChildren();for(const photo of current.photos){const span=document.createElement('span');span.textContent=photo.kind+(photo.note?' · '+photo.note:'');$('photos').append(span)}
+  const kinds=new Set(current.photos.map(p=>p.kind));
+  $('missing').textContent=required.filter(k=>!kinds.has(k)).length?'Не хватает фото: '+required.filter(k=>!kinds.has(k)).join(', '):'Обязательные фото загружены.';
+  $('upload').classList.toggle('hidden',!['draft','stored','return_requested'].includes(current.status));
+  $('acceptBlock').classList.toggle('hidden',current.status!=='draft');
+  $('returnBlock').classList.toggle('hidden',current.status!=='stored');
+  $('handoverBlock').classList.toggle('hidden',current.status!=='return_requested');
+ }catch(e){status(e.message)}
+}
+$('upload').onsubmit=async e=>{
+ e.preventDefault();if(!current)return;const data=new FormData(e.target);
+ try{await request('/storage/'+current.id+'/photos',{method:'POST',form:data});e.target.reset();await openRecord(current.id);status('Фото сохранено на сервере.')}catch(err){status(err.message)}
+};
+$('accept').onclick=async()=>{
+ if(!current)return;try{
+  await request('/storage/'+current.id+'/accept',{method:'POST',body:{version:current.version,condition_confirmed:$('confirmed').checked}});
+  await openRecord(current.id);await refresh();status('Мотоцикл принят на хранение.')
+ }catch(e){status(e.message)}
+};
+$('requestReturn').onclick=async()=>{
+ if(!current)return;try{
+  await request('/storage/'+current.id+'/request-return',{method:'POST',body:{version:current.version,note:$('returnNote').value}});
+  await openRecord(current.id);await refresh();status('Возврат запрошен.')
+ }catch(e){status(e.message)}
+};
+$('handover').onclick=async()=>{
+ if(!current)return;try{
+  await request('/storage/'+current.id+'/handover',{method:'POST',body:{version:current.version,received_by:$('recipient').value,condition_at_return:$('returnCondition').value,all_keys_returned:$('keys').checked,documents_returned:$('documents').checked}});
+  await openRecord(current.id);await refresh();status('Мотоцикл выдан; событие записано на сервер.')
+ }catch(e){status(e.message)}
+};
+</script></body></html>
