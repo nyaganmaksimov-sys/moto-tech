@@ -336,7 +336,7 @@ const form=document.createElement('form');const kind=document.createElement('sel
    if(node.tagName==='FORM'&&node.querySelector('button')?.textContent==='Сохранить согласование')section='Согласование';
    sections.get(section).content.append(node);
   }
-  const first=all[0];if(first?.tagName==='H2')panel.insertBefore(frame,first.nextSibling);else panel.append(frame);
+  const lastSummary=[...panel.children].filter(node=>node.classList?.contains('compact-order-head')||node.classList?.contains('compact-order-finance')).pop();if(lastSummary)lastSummary.after(frame);else if(all[0]?.tagName==='H2')all[0].after(frame);else panel.append(frame);
   for(const [name,entry] of sections){if(!entry.content.children.length)entry.d.remove()}
  }
  panel.scrollIntoView({behavior:'smooth'});
