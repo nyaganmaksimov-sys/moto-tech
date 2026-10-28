@@ -1155,8 +1155,18 @@ function setupCompactIntake(){
   const exact=(found.data||[]).filter(v=>String(v.vin||'').toUpperCase().replace(/[\\s-]/g,'')===raw);
   if(exact.length===1){fillExistingVehicle(exact[0]);result.append(make('strong',null,'✓ Найдена техника: '+[exact[0].brand,exact[0].model,exact[0].plate].filter(Boolean).join(' · ')));return}
   const options=exact.length?exact:found.data||[];
-  if(!options.length){result.append(make('small',null,'В нашей базе нет этой техники. Можно определить марку и модель по VIN или заполнить вручную.'));
-   if(/^[A-HJ-NPR-Z0-9]{17}$/.test(raw)){const decode=make('button','secondary','Определить данные по VIN');decode.type='button';decode.onclick=()=>{$('inVin').value=raw;$('decodeVinButton').click()};result.append(decode)}return}
+  if(!options.length){
+   $('inVin').value=raw;
+   if(/^[A-HJ-NPR-Z0-9]{17}$/.test(raw)){
+    result.append(make('small',null,'В базе MOTO TECH не найдено. Определяем технику через интернет…'));
+    await $('decodeVinButton').onclick();
+    if(request!==vinSeq)return;
+    const feedback=$('decodeVinStatus').textContent||'';
+    result.replaceChildren(make('small',null,feedback));
+    if($('inBrand').value||$('inModel').value)result.prepend(make('strong',null,'✓ Доступные характеристики заполнены из внешней VIN-базы'));
+   }else result.append(make('small',null,'В нашей базе техника не найдена. Для автоматического определения через интернет нужен VIN из 17 символов; номер рамы можно внести вручную.'));
+   return;
+  }
   for(const v of options.slice(0,12)){const btn=make('button','secondary',[v.brand,v.model,v.plate,v.vin,v.customer_name].filter(Boolean).join(' · '));btn.type='button';btn.onclick=()=>{fillExistingVehicle(v);result.replaceChildren(make('strong',null,'✓ Данные техники и клиента заполнены'))};result.append(btn)}
  }
  find.onclick=lookUpVin;vinInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lookUpVin()}});
