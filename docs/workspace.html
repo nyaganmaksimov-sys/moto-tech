@@ -960,7 +960,7 @@ const form=document.createElement('form');const kind=document.createElement('sel
    sections.get(section).content.append(node);
   }
   const lastSummary=[...panel.children].filter(node=>node.classList?.contains('compact-order-head')||node.classList?.contains('compact-order-finance')).pop();if(lastSummary)lastSummary.after(frame);else if(all[0]?.tagName==='H2')all[0].after(frame);else panel.append(frame);
-  for(const [name,entry] of sections){if(!entry.content.children.length)entry.d.remove()}
+  for(const [name,entry] of sections){if(name==='Связь с клиентом'||!entry.content.children.length)entry.d.remove()}
  }
  panel.scrollIntoView({behavior:'smooth'});
 }catch(error){panel.replaceChildren(elt('h2','Ошибка открытия'),elt('p',error.message,'muted'))}
