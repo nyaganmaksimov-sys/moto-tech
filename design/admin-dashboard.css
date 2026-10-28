@@ -1,0 +1,38 @@
+/* MOTO TECH admin workspace v1. Safe, layout-only overrides. */
+body.mt-admin #sidebar{width:210px;padding:14px 10px}
+body.mt-admin #sidebar button{font-size:13px;padding:10px 12px;margin:2px 0}
+body.mt-admin #appShell main{max-width:1320px;margin:16px auto}
+body.mt-admin #sectionTitle{font-size:22px;margin:4px 0 14px}
+body.mt-admin #overviewSection>.card:first-of-type{padding:12px 15px;margin-bottom:12px}
+body.mt-admin #overviewSection>.card:first-of-type h3{display:none}
+body.mt-admin #orderQuickSearch{margin:0}
+body.mt-admin #roleWorkspace,body.mt-admin #overviewMetrics,body.mt-admin #quickIntakeActions{display:none!important}
+body.mt-admin #overviewSection>h3{display:none}
+body.mt-admin #overviewStatusCards{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important;margin:12px 0 18px!important}
+body.mt-admin #overviewStatusCards .card{margin:0;padding:14px;background:#202733}
+body.mt-admin #overviewStatusCards .card b{font-size:28px}
+body.mt-admin #overviewStatusCards .card small:last-child{display:none}
+body.mt-admin #overviewRecentOrders{display:grid;gap:7px}
+body.mt-admin .recent-order-card{display:grid;grid-template-columns:1fr auto;gap:5px 12px;margin:0;padding:11px 14px}
+body.mt-admin .recent-order-description{grid-column:1;margin:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.mt-admin .recent-order-card>small{grid-column:1}
+body.mt-admin .recent-order-card>button{grid-column:2;grid-row:1/4;align-self:center}
+.mt-admin-actions{display:flex;gap:10px;margin-bottom:14px}
+.mt-intake-picker[hidden]{display:none!important}
+.mt-intake-picker{position:fixed;inset:0;z-index:11000;background:rgba(0,0,0,.76);display:grid;place-items:center;padding:16px}
+.mt-intake-dialog{width:min(420px,100%);background:#202834;border:1px solid #445166;border-radius:16px;padding:22px}
+.mt-intake-dialog .mt-choice{display:block;width:100%;text-align:left;margin:9px 0}
+.mt-intake-dialog .mt-close{float:right;background:#343d4c}
+#mtMobileBottom{display:none}
+@media(max-width:800px){
+ body.mt-admin #mobileNavToggle{display:none}
+ body.mt-admin #appShell main{margin:12px auto 90px;padding:0 12px}
+ body.mt-admin #overviewStatusCards{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ body.mt-admin .mt-admin-actions{display:block}
+ body.mt-admin .mt-admin-actions button{width:100%;min-height:48px}
+ body.mt-admin .mt-admin-actions button+button{display:none}
+ body.mt-admin #mtMobileBottom{display:grid;position:fixed;bottom:0;left:0;right:0;z-index:9000;grid-template-columns:repeat(4,minmax(0,1fr));background:#191f2a;border-top:1px solid #354052;padding:7px 5px max(7px,env(safe-area-inset-bottom))}
+ body.mt-admin #mtMobileBottom button{background:transparent;border:0;font-size:12px;min-width:0;padding:7px 3px;color:#bec6d1}
+ body.mt-admin #mtMobileBottom button.active{color:#ff7480}
+ body.mt-admin #mtMobileBottom button span{display:block;font-size:19px}
+}
