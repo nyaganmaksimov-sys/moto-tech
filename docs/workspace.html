@@ -1275,6 +1275,7 @@ function setupCompactIntake(){
  let active=0;
  function showStep(index,scroll=true){
   active=Math.max(0,Math.min(steps.length-1,index));
+  try{sessionStorage.setItem('mt.intakeStep',String(active))}catch(_){}
   for(let i=0;i<steps.length;i++){
    for(const node of steps[i].nodes)node.classList.toggle('mt-step-hidden',i!==active);
   }
@@ -1290,7 +1291,7 @@ function setupCompactIntake(){
   b.type='button';b.onclick=()=>showStep(i);navigator.append(b);
  }
  previous.onclick=()=>showStep(active-1);next.onclick=()=>showStep(active+1);
- showStep(0,false);
+ showStep((()=>{try{return Number(sessionStorage.getItem('mt.intakeStep')||0)}catch(_){return 0}})(),false);
  // If native validation finds a field in a hidden step, reveal it first.
  form.addEventListener('invalid',event=>{
   const field=event.target;
@@ -1312,6 +1313,7 @@ async function ensureIntakeReferenceData(force=false){
  return mtIntakeLoading;
 }
 function selectView(view){
+ try{sessionStorage.setItem('mt.currentView',view)}catch(_){}
  const listTables=['orders','storage_records','customers','vehicles','price_items','part_requests','staff','crm_tasks','service_inventory','service_appointments','service_finance_entries'];
  const home=view==='overview',showList=listTables.includes(view);
  for(const [id,visible] of [['overviewSection',home],['profileSection',view==='profile'],['intakeSection',view==='intake'],['listSection',showList],['auditSection',view==='staff_audit_log'&&['owner_manager','manager','administrator'].includes(staff?.role)],['moduleFormSection',showList&&['crm_tasks','service_inventory','service_appointments','service_finance_entries'].includes(view)],['vehicleOverlay',false]]){
@@ -1359,5 +1361,5 @@ function installMtAdminSidebar(){
  // Keep the active nested route visible, including when opened from another section.
  sidebar.addEventListener('click',e=>{const btn=e.target.closest('button[data-view]');if(btn&&btn.closest('details'))btn.closest('details').open=true});
 }
-setupCompactIntake();try{await refresh();if(staff){installMtAdmin();installMtAdminSidebar();selectView('overview');$('sidebar').style.display=''}else{location.replace('./login.html?v=no-pin-gate-20261022')}}catch(e){msg('Ошибка авторизации: '+e.message);$('login').style.display='block';$('dashboard').style.display='none';$('sidebar').style.display='none';$('loginLink').href='./login.html?v=no-pin-gate-20261022'}
+setupCompactIntake();try{await refresh();if(staff){installMtAdmin();installMtAdminSidebar();let restoredView='overview';try{const v=sessionStorage.getItem('mt.currentView');if(['overview','profile','intake','orders','storage_records','customers','vehicles','price_items','part_requests','staff','crm_tasks','service_inventory','service_appointments','service_finance_entries','staff_audit_log'].includes(v))restoredView=v}catch(_){}selectView(restoredView);$('sidebar').style.display=''}else{location.replace('./login.html?v=no-pin-gate-20261022')}}catch(e){msg('Ошибка авторизации: '+e.message);$('login').style.display='block';$('dashboard').style.display='none';$('sidebar').style.display='none';$('loginLink').href='./login.html?v=no-pin-gate-20261022'}
 </script></div></body></html>
