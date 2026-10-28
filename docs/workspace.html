@@ -1029,21 +1029,29 @@ const costForm=document.createElement('form');costForm.style.margin='16px 0';
 const isMechanic=staff.role==='mechanic';
 const costKind=document.createElement('select');for(const [v,n] of [['work','Работа'],['part','Запчасть']]){if(isMechanic&&v==='part')continue;const o=new Option(n,v);costKind.append(o)}
 const costName=document.createElement('input');costName.placeholder='Наименование работы или запчасти';costName.maxLength=250;costName.required=true;
-const catalogSearch=document.createElement('input');catalogSearch.type='search';catalogSearch.placeholder='Введите первые 3 буквы работы или код из прайса';catalogSearch.autocomplete='off';
+const catalogSearch=document.createElement('input');catalogSearch.type='search';catalogSearch.placeholder='Поиск работ по прайсу: например, замена, диагностика';catalogSearch.autocomplete='off';
 const suggestions=elt('div','','mt-catalog-suggestions');suggestions.setAttribute('role','listbox');
-const catalogStatus=elt('small','Загрузка действующего прайса…','muted');
-const fromCatalog=document.createElement('select');fromCatalog.append(new Option('Выберите работу из прайса или заполните вручную',''));
-let availablePrices=[];
-function applyCatalog(entry){if(!entry)return;fromCatalog.value=entry.id;costKind.value='work';costName.value=entry.name;price.value=String(entry.price);catalogSearch.value=entry.name;suggestions.replaceChildren();catalogStatus.textContent='Выбрано из прайса: '+entry.name}
-function renderCatalog(){const term=catalogSearch.value.trim().toLocaleLowerCase('ru-RU');const selected=fromCatalog.value;fromCatalog.replaceChildren(new Option('Выберите работу из прайса или заполните вручную',''));suggestions.replaceChildren();
- const matches=availablePrices.filter(x=>!term||[x.name,x.code,x.category,x.vehicle_type].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(term)));
- for(const x of matches.slice(0,100)){fromCatalog.append(new Option([x.name,Number(x.price).toLocaleString('ru-RU')+' ₽'].join(' · '),x.id))}
- if(matches.some(x=>x.id===selected))fromCatalog.value=selected;
- if(term.length>=2){for(const entry of matches.slice(0,12)){const b=elt('button',[entry.name,Number(entry.price).toLocaleString('ru-RU')+' ₽'].join(' · '),'secondary');b.type='button';b.setAttribute('role','option');b.onclick=()=>applyCatalog(entry);suggestions.append(b)}catalogStatus.textContent=matches.length?'Найдено: '+matches.length+' · нажмите на нужную работу':'В прайсе нет совпадений — работу можно ввести вручную'}
- else catalogStatus.textContent='Введите минимум 2 символа для поиска';
+const catalogStatus=elt('small','Введите 2–3 буквы названия работы','muted');
+const fromCatalog=document.createElement('select');fromCatalog.append(new Option('Выберите найденную работу или заполните вручную',''));
+let availablePrices=[], catalogSearchSequence=0, catalogSearchTimer=null;
+function applyCatalog(entry){if(!entry)return;const found=availablePrices.find(x=>x.id===entry.id);if(!found)availablePrices.push(entry);fromCatalog.replaceChildren(new Option(entry.name+' · '+Number(entry.price).toLocaleString('ru-RU')+' ₽',entry.id));fromCatalog.value=entry.id;costKind.value='work';costName.value=entry.name;price.value=String(entry.price);catalogSearch.value=entry.name;suggestions.replaceChildren();catalogStatus.textContent='Выбрана работа: '+entry.name}
+function showCatalogResults(rows,term){suggestions.replaceChildren();fromCatalog.replaceChildren(new Option('Выберите работу из списка',''));if(!rows.length){catalogStatus.textContent='Совпадений нет — можно указать работу вручную';return}
+ for(const entry of rows){availablePrices.push(...(!availablePrices.some(x=>x.id===entry.id)?[entry]:[]));fromCatalog.append(new Option(entry.name+' · '+Number(entry.price).toLocaleString('ru-RU')+' ₽',entry.id))}
+ for(const entry of rows.slice(0,12)){const b=elt('button',entry.name+' · '+Number(entry.price).toLocaleString('ru-RU')+' ₽','secondary');b.type='button';b.setAttribute('role','option');b.onclick=()=>applyCatalog(entry);suggestions.append(b)}
+ catalogStatus.textContent='Найдено работ: '+rows.length+'. Нажмите нужную строку для выбора.';
 }
-catalogSearch.oninput=renderCatalog;
-db.from('price_items').select('id,code,name,price,category,vehicle_type').eq('is_archived',false).order('name').limit(1000).then(({data,error})=>{if(error){catalogStatus.textContent='Прайс не загрузился: '+error.message;return}availablePrices=data||[];renderCatalog()});
+async function searchCatalog(){const term=catalogSearch.value.trim();const seq=++catalogSearchSequence;
+ if(term.length<2){suggestions.replaceChildren();catalogStatus.textContent='Введите минимум 2 буквы названия работы';return}
+ catalogStatus.textContent='Ищем в действующем прайсе…';
+ const safe=term.replace(/[,%()]/g,' ').trim();if(!safe){catalogStatus.textContent='Введите название работы';return}
+ const res=await db.from('price_items').select('id,code,name,price,category,vehicle_type').eq('is_archived',false).or('name.ilike.%'+safe+'%,code.ilike.%'+safe+'%').order('name').limit(30);
+ if(seq!==catalogSearchSequence)return;
+ if(res.error){catalogStatus.textContent='Ошибка поиска прайса: '+res.error.message;return}
+ showCatalogResults(res.data||[],term);
+}
+catalogSearch.oninput=()=>{if(catalogSearchTimer)clearTimeout(catalogSearchTimer);catalogSearchTimer=setTimeout(searchCatalog,230)};
+catalogSearch.onkeydown=e=>{if(e.key==='Enter'&&suggestions.firstElementChild){e.preventDefault();suggestions.firstElementChild.click()}};
+catalogSearch.onfocus=()=>{if(catalogSearch.value.trim().length>=2)void searchCatalog()};
 const qty=document.createElement('input');qty.type='number';qty.min='0.01';qty.step='0.01';qty.value='1';qty.required=true;
 const price=document.createElement('input');price.type='number';price.min='0';price.step='0.01';price.placeholder='Цена за единицу, ₽';price.required=true;
 fromCatalog.onchange=()=>applyCatalog(availablePrices.find(x=>x.id===fromCatalog.value));
