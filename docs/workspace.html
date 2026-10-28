@@ -1167,7 +1167,33 @@ async function loadStaffNotifications(){
  const list=$('staffNotifications');if(!list)return;list.replaceChildren(elt('p','Загрузка уведомлений…','muted'));
  const result=await db.from('notifications').select('id,title,created_at,read_at,payload').order('created_at',{ascending:false}).limit(20);
  if(result.error){list.replaceChildren(elt('p',result.error.message,'muted'));return}
- list.replaceChildren();for(const n of result.data){const item=elt('div',n.title+' · '+new Date(n.created_at).toLocaleString('ru-RU'),'item');if(n.payload?.mechanic_name)item.append(elt('small','Выполнил: '+n.payload.mechanic_name));if(n.payload?.order_id||n.payload?.demo){const go=elt('button','Открыть заказ и ход работ','secondary');go.type='button';go.onclick=()=>{if(n.payload?.demo){openMtMechanicPreview();const index=mtDemo.orders.findIndex(o=>o.number===n.payload.order_number);if(index>=0){mtDemo.selected=index;mtDemo.tab='orders';const work=mtDemo.orders[index].works.find(w=>w.name===n.payload.work_name);if(work)work.done=true;renderMtMechanicDemo()}return}openRecord('orders',n.payload.order_id)};item.append(go)}list.append(item)}
+ list.replaceChildren();
+ for(const n of result.data){
+  const demo=Boolean(n.payload?.demo);
+  const item=elt('div',n.title+' · '+new Date(n.created_at).toLocaleString('ru-RU'),'item');
+  if(n.payload?.mechanic_name)item.append(elt('small','Выполнил: '+n.payload.mechanic_name));
+  if(demo){item.append(elt('small','Демонстрационное уведомление — реального заказ-наряда нет.','muted'))}
+  else if(n.payload?.order_id||n.payload?.order_number){
+   const go=elt('button','Открыть заказ-наряд','secondary');go.type='button';
+   go.onclick=async()=>{
+    go.disabled=true;
+    try{
+     let orderId=n.payload?.order_id;
+     if(!orderId&&n.payload?.order_number){
+      const source=staff.role==='mechanic'?'mechanic_orders':'orders';
+      const result=await db.from(source).select('id').eq('order_number',n.payload.order_number).limit(1).maybeSingle();
+      if(result.error)throw result.error;
+      orderId=result.data?.id;
+     }
+     if(!orderId)throw new Error('Заказ-наряд не найден в базе');
+     await openRecord('orders',orderId);
+    }catch(error){msg('Не удалось открыть заказ: '+error.message)}
+    finally{go.disabled=false}
+   };
+   item.append(go)
+  }
+  list.append(item)
+ }
  if(!result.data.length)list.append(elt('p','Новых уведомлений нет','muted'))
 }
 async function loadAuditLog(){
