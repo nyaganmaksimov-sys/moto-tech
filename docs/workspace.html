@@ -862,19 +862,7 @@ if(table==='orders'&&r.mechanic_id){const mechanic=await db.from('staff').select
  const edit=elt('button','Редактировать заявку');edit.type='button';edit.onclick=async()=>{const newText=prompt('Изменить описание заявки '+r.order_number,r.complaint||'');if(newText===null)return;if(newText.trim().length<3)return msg('Укажите описание от 3 символов');if(!await confirmActionPin())return;edit.disabled=true;try{const res=await db.rpc('update_repair_request',{p_order:id,p_complaint:newText.trim()});if(res.error)throw res.error;msg('Изменения заявки сохранены');await openRecord('orders',id);await loadTab('orders')}catch(error){msg('Ошибка изменения: '+error.message);edit.disabled=false}};panel.append(edit);
  if(['owner_manager','manager','administrator'].includes(staff.role)){const del=elt('button','Удалить ошибочную заявку');del.type='button';del.className='secondary';del.onclick=async()=>{const reason=prompt('Причина удаления (от 5 символов)');if(reason===null)return;if(reason.trim().length<5)return msg('Укажите причину');if(!confirm('Удалить заявку '+r.order_number+' из рабочих списков? История сохранится.'))return;if(!await confirmActionPin())return;del.disabled=true;const res=await db.rpc('admin_archive_bad_order',{p_order:id,p_reason:reason.trim()});if(res.error){msg(res.error.message);del.disabled=false}else{$('vehicleOverlay').style.display='none';msg('Заявка архивирована');selectView('orders')}};panel.append(del)}
  }
- if(table==='orders'&&r.status!=='Выдан'&&!r.deleted_at){
- const section=elt('div','','card');section.append(elt('h3','Ссылка клиенту · ход ремонта и вопросы'));
- const issue=elt('button','Создать новую ссылку для клиента');issue.type='button';
- const explanation=elt('p','Новая ссылка отключит предыдущую. Отправьте её клиенту через мессенджер.','muted');
- issue.onclick=async()=>{if(!confirm('Создать персональную ссылку? Предыдущая ссылка перестанет работать.'))return;issue.disabled=true;try{const result=await db.rpc('issue_customer_repair_link',{p_order:id});if(result.error)throw result.error;const link=new URL('./customer-repair.html?token='+encodeURIComponent(result.data),location.href).href;const copy=elt('button','Скопировать ссылку клиенту');copy.type='button';copy.onclick=()=>navigator.clipboard.writeText(link).then(()=>msg('Ссылка скопирована')).catch(()=>prompt('Скопируйте ссылку',link));section.append(copy);explanation.textContent='Ссылка создана. Отправьте её владельцу техники.'}catch(err){msg('Ошибка ссылки: '+err.message)}finally{issue.disabled=false}};
- section.append(explanation,issue,elt('h3','Диалог с клиентом'));
- const history=elt('div','','item');section.append(history);
- const form=document.createElement('form');const question=document.createElement('textarea');question.maxLength=2000;question.placeholder='Задайте клиенту вопрос о ремонте';question.required=true;question.style.cssText='width:100%;min-height:65px';
- const send=elt('button','Отправить клиенту');send.type='submit';form.append(question,send);section.append(form);
- const loadMessages=async()=>{const result=await db.from('customer_repair_messages').select('author_type,body,created_at').eq('order_id',id).order('created_at',{ascending:true}).limit(150);history.replaceChildren();if(result.error){history.append(elt('p','Ошибка переписки: '+result.error.message));return}for(const m of result.data||[]){history.append(elt('p',(m.author_type==='client'?'Клиент':'Сервис')+' · '+new Date(m.created_at).toLocaleString('ru-RU')+': '+m.body))}};
- form.onsubmit=async e=>{e.preventDefault();if(send.disabled)return;send.disabled=true;try{const result=await db.rpc('staff_repair_message',{p_order:id,p_body:question.value.trim()});if(result.error)throw result.error;question.value='';await loadMessages()}catch(err){msg('Ошибка отправки: '+err.message)}finally{send.disabled=false}};
- const update=elt('button','Обновить переписку');update.type='button';update.onclick=loadMessages;section.append(update);panel.append(section);void loadMessages();
-}
+
 if(r.vehicle_id){
  const view=elt('button','Карточка мотоцикла');view.onclick=()=>openVehicle(r.vehicle_id);panel.append(view);
  const qr=elt('button','Печать QR этого '+(table==='orders'?'заказа':'договора'));qr.className='secondary';qr.onclick=()=>showVehicleQR(r.vehicle_id,table==='orders'?'Ремонт':'Хранение',r.order_number||r.contract_number||'',table==='orders'?'order':'storage',r.id);panel.append(qr)
@@ -933,7 +921,7 @@ if(['owner_manager','manager','administrator'].includes(staff.role)){const revie
 const form=document.createElement('form');const kind=document.createElement('select');for(const k of ['diagnostic','work','note']){const opt=document.createElement('option');opt.value=k;opt.textContent=k;kind.append(opt)}const desc=document.createElement('textarea');desc.required=true;desc.maxLength=3000;desc.placeholder='Диагностика или выполненная работа';desc.style.cssText='display:block;width:100%;min-height:90px;margin:10px 0';const status=document.createElement('select');for(const k of ['','Принят','Диагностика','В работе','Ожидает запчасти','Готов']){if(k==='Выдан'&&staff.role==='mechanic')continue;const opt=document.createElement('option');opt.value=k;opt.textContent=k||'Не менять статус';status.append(opt)}const save=elt('button','Сохранить запись');save.type='submit';form.append(kind,desc,status,save);form.onsubmit=async ev=>{ev.preventDefault();save.disabled=true;const result=await db.rpc('record_repair_activity',{p_order_id:id,p_kind:kind.value,p_description:desc.value,p_new_status:status.value||null});if(result.error){msg(result.error.message);save.disabled=false}else{msg('Запись сохранена');await openRecord('orders',id)}};panel.append(form)}
  if(table==='orders'){
   const all=[...panel.children];const sections=new Map();
-  const order=[['Работы и запчасти',true],['Фотографии техники',false],['Документы',false],['Согласование',false],['Связь с клиентом',false],['История ремонта',false],['Дополнительные действия',false]];
+  const order=[['Работы и запчасти',true],['Фотографии техники',false],['Документы',false],['Согласование',false],['История ремонта',false],['Дополнительные действия',false]];
   const frame=document.createElement('div');frame.className='order-accordion';
   for(const [name,opened] of order){const d=document.createElement('details');d.className='order-section';d.open=opened;const summary=document.createElement('summary');summary.textContent=name;const content=document.createElement('div');content.className='order-content';d.append(summary,content);sections.set(name,{d,content,summary});frame.append(d)}
   let section='Дополнительные действия';
@@ -941,8 +929,7 @@ const form=document.createElement('form');const kind=document.createElement('sel
   for(const node of all){
    if(node.classList?.contains('compact-order-head')||node.classList?.contains('compact-order-finance')||node===all[0])continue;
    const title=findText(node);
-   if(title.includes('Ссылка клиенту'))section='Связь с клиентом';
-   else if(title.includes('Фотографии техники')||title.includes('Состояние при приёмке'))section='Фотографии техники';
+   if(title.includes('Фотографии техники')||title.includes('Состояние при приёмке'))section='Фотографии техники';
    else if(title.includes('Комментарии сотрудников')||title.includes('Журнал ремонта'))section='История ремонта';
    else if(title.includes('Документы заказ-наряда')||title.includes('Архив PDF'))section='Документы';
    else if(title.includes('Смета заказа')||title.includes('Работы и заработок механика'))section='Работы и запчасти';
@@ -960,7 +947,7 @@ const form=document.createElement('form');const kind=document.createElement('sel
    sections.get(section).content.append(node);
   }
   const lastSummary=[...panel.children].filter(node=>node.classList?.contains('compact-order-head')||node.classList?.contains('compact-order-finance')).pop();if(lastSummary)lastSummary.after(frame);else if(all[0]?.tagName==='H2')all[0].after(frame);else panel.append(frame);
-  for(const [name,entry] of sections){if(name==='Связь с клиентом'||!entry.content.children.length)entry.d.remove()}
+  for(const [name,entry] of sections){if(!entry.content.children.length)entry.d.remove()}
  }
  panel.scrollIntoView({behavior:'smooth'});
 }catch(error){panel.replaceChildren(elt('h2','Ошибка открытия'),elt('p',error.message,'muted'))}
