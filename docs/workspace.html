@@ -834,10 +834,10 @@ async function loadInventoryWorkspace(){
    if(x.notes)card.append(elt('p',x.notes,'muted'));if(manager){
     const actions=elt('div','','mt-inventory-card-actions');
     const edit=elt('button','Редактировать','secondary');edit.type='button';edit.onclick=()=>showEditor(x);
-    const remove=elt('button','Удалить ошибочную позицию','secondary');remove.type='button';remove.classList.add('mt-inventory-delete');
+    const remove=elt('button','Удалить','secondary');remove.type='button';remove.classList.add('mt-inventory-delete');
     remove.onclick=async()=>{
       if(!confirm('Удалить позицию «'+x.name+'» из склада и оборудования? Это действие нельзя отменить.'))return;
-      const check=prompt('Для подтверждения напишите УДАЛИТЬ');if(check===null||check.trim().toUpperCase()!=='УДАЛИТЬ'){msg('Удаление отменено');return}
+      
       if(!await confirmActionPin())return;
       remove.disabled=true;
       try{const result=await db.from('service_inventory').delete().eq('id',x.id).select('id');if(result.error)throw result.error;if(result.data?.length!==1)throw new Error('База не подтвердила удаление');
