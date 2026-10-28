@@ -1210,7 +1210,7 @@ function setupCompactIntake(){
  const work=make('section','mt-intake-work');move(work,'mechanicAssignLabel');move(work,'intakeServiceBlock');field(work,'inNotes');form.append(work);
  const storage=make('section','mt-intake-storage');move(storage,'storageInputs');form.append(storage);
  const draftSection=$('saveIntakeDraft')?.closest('.card');
- if(draftSection){const detail=make('details','mt-intake-draft');detail.append(make('summary',null,'Черновики приёмки (3 часа)'));detail.append(draftSection);form.after(detail)}
+ if(draftSection){const detail=make('details','mt-intake-draft');detail.append(make('summary',null,'Черновики приёмки (3 часа)'));detail.append(draftSection);form.after(detail);detail.addEventListener('toggle',()=>{if(detail.open)void loadIntakeDrafts()})}
  const footer=make('div','mt-intake-footer');const total=make('div','mt-intake-total');total.append(make('small',null,'Сумма работ и хранения'),make('strong','0 ₽'));footer.append(total);
  const submit=form.querySelector('button[type="submit"]');if(submit){submit.textContent='Оформить приёмку';submit.classList.add('mt-intake-submit');footer.append(submit)}
  form.append(footer);
@@ -1268,6 +1268,14 @@ function setupCompactIntake(){
 function startQuickIntake(kind){selectView('intake');$('intakeKind').value=kind;$('intakeKind').onchange();$('intakeSection').scrollIntoView({behavior:'smooth',block:'start'})}
 $('quickRepairIntake').onclick=()=>startQuickIntake('repair');
 $('quickStorageIntake').onclick=()=>startQuickIntake('storage');
+// Cache reference lists during the session; load draft list only when opened.
+let mtIntakeCacheAt=0,mtIntakeLoading=null;
+async function ensureIntakeReferenceData(force=false){
+ if(mtIntakeLoading)return mtIntakeLoading;
+ if(!force&&Date.now()-mtIntakeCacheAt<5*60*1000)return;
+ mtIntakeLoading=Promise.allSettled([loadIntakeMechanics(),loadIntakeCatalog()]).then(()=>{mtIntakeCacheAt=Date.now()}).finally(()=>{mtIntakeLoading=null});
+ return mtIntakeLoading;
+}
 function selectView(view){
  const listTables=['orders','storage_records','customers','vehicles','price_items','part_requests','staff','crm_tasks','service_inventory','service_appointments','service_finance_entries'];
  const home=view==='overview',showList=listTables.includes(view);
@@ -1275,7 +1283,7 @@ function selectView(view){
   const node=$(id);if(node)node.classList.toggle('cloud-hidden',!visible);
  }
  document.querySelectorAll('#sidebar [data-view]').forEach(n=>n.classList.toggle('active',n.dataset.view===view));if(document.querySelector('#mtAdminSidebarMore [data-view="'+view+'"]'))document.getElementById('mtAdminSidebarMore').open=true;if(document.querySelector('#mtSidebarDirectory [data-view="'+view+'"]'))document.getElementById('mtSidebarDirectory').open=true;document.querySelectorAll('#mtMobileBottom [data-mt-view]').forEach(n=>n.classList.toggle('active',n.dataset.mtView===view));
- if(view==='intake'&&staff){void loadIntakeMechanics();void loadIntakeCatalog();void loadIntakeDrafts();$('intakeKind').onchange()}if(home&&staff){void loadOverview();void loadStaffNotifications()}if(view==='staff_audit_log'&&staff&&['owner_manager','manager','administrator'].includes(staff.role)){void loadAuditEmployees();void loadAuditLog()}
+ if(view==='intake'&&staff){void ensureIntakeReferenceData();$('intakeKind').onchange()}if(home&&staff){void loadOverview();void loadStaffNotifications()}if(view==='staff_audit_log'&&staff&&['owner_manager','manager','administrator'].includes(staff.role)){void loadAuditEmployees();void loadAuditLog()}
  if(showList&&staff){void loadTab(view);void renderModuleForm(view);$('newPriceButton').style.display=view==='price_items'&&['owner_manager','manager','administrator'].includes(staff.role)?'inline-block':'none'}
 }
 document.querySelectorAll('#sidebar [data-view]').forEach(b=>b.onclick=()=>selectView(b.dataset.view));$('headerProfile').onclick=()=>{closeMobileMenu();selectView('profile');};$('refreshStaffNotifications').onclick=loadStaffNotifications;$('overviewAllOrders').onclick=()=>{window.motoOrderFilter=null;selectView('orders')};
