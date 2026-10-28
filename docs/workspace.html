@@ -820,10 +820,11 @@ function installMtAdminSidebar(){
   btn.append(icon,elt('span',match?.[2]||label,'mt-nav-label'));
   btn.title=match?.[2]||label;
  }
+ sidebar.querySelector('button[data-view="intake"]')?.remove();
  // Profile is available in the header: avoid a duplicated sidebar link.
  sidebar.querySelector('button[data-view="profile"]')?.remove();
  const navMain=document.createElement('div');navMain.className='mt-nav-main';navMain.setAttribute('aria-label','Основные разделы');
- const core=['overview','intake','orders','storage_records','part_requests','crm_tasks'];
+ const core=['overview','orders','storage_records','part_requests','crm_tasks'];
  for(const view of core){const btn=sidebar.querySelector('button[data-view="'+view+'"]');if(btn)navMain.append(btn)}
  const directory=document.createElement('details');directory.className='mt-sidebar-more';directory.id='mtSidebarDirectory';
  directory.append(elt('summary','Справочники'));
