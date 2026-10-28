@@ -933,10 +933,10 @@ if(['owner_manager','manager','administrator'].includes(staff.role)){const revie
 const form=document.createElement('form');const kind=document.createElement('select');for(const k of ['diagnostic','work','note']){const opt=document.createElement('option');opt.value=k;opt.textContent=k;kind.append(opt)}const desc=document.createElement('textarea');desc.required=true;desc.maxLength=3000;desc.placeholder='Диагностика или выполненная работа';desc.style.cssText='display:block;width:100%;min-height:90px;margin:10px 0';const status=document.createElement('select');for(const k of ['','Принят','Диагностика','В работе','Ожидает запчасти','Готов']){if(k==='Выдан'&&staff.role==='mechanic')continue;const opt=document.createElement('option');opt.value=k;opt.textContent=k||'Не менять статус';status.append(opt)}const save=elt('button','Сохранить запись');save.type='submit';form.append(kind,desc,status,save);form.onsubmit=async ev=>{ev.preventDefault();save.disabled=true;const result=await db.rpc('record_repair_activity',{p_order_id:id,p_kind:kind.value,p_description:desc.value,p_new_status:status.value||null});if(result.error){msg(result.error.message);save.disabled=false}else{msg('Запись сохранена');await openRecord('orders',id)}};panel.append(form)}
  if(table==='orders'){
   const all=[...panel.children];const sections=new Map();
-  const order=[['Основное',false],['Работы и запчасти',true],['Фотографии техники',false],['Документы',false],['Согласование',false],['Связь с клиентом',false],['История ремонта',false],['Дополнительные действия',false]];
+  const order=[['Работы и запчасти',true],['Фотографии техники',false],['Документы',false],['Согласование',false],['Связь с клиентом',false],['История ремонта',false],['Дополнительные действия',false]];
   const frame=document.createElement('div');frame.className='order-accordion';
   for(const [name,opened] of order){const d=document.createElement('details');d.className='order-section';d.open=opened;const summary=document.createElement('summary');summary.textContent=name;const content=document.createElement('div');content.className='order-content';d.append(summary,content);sections.set(name,{d,content,summary});frame.append(d)}
-  let section='Основное';
+  let section='Дополнительные действия';
   const findText=n=>((n.tagName==='H2'||n.tagName==='H3'||n.tagName==='SUMMARY')?n.textContent||'':'').trim();
   for(const node of all){
    if(node.classList?.contains('compact-order-head')||node.classList?.contains('compact-order-finance')||node===all[0])continue;
@@ -948,6 +948,9 @@ const form=document.createElement('form');const kind=document.createElement('sel
    else if(title.includes('Смета заказа')||title.includes('Работы и заработок механика'))section='Работы и запчасти';
    else if(title.includes('Согласование сметы'))section='Согласование';
    else if(title.includes('Оформление выдачи'))section='Документы';
+   if(node.classList?.contains('order-cost-line'))section='Работы и запчасти';
+   if(node.querySelector?.('h3')?.textContent?.includes('Работы и заработок'))section='Работы и запчасти';
+   if(node.querySelector?.('h3')?.textContent?.includes('Фотографии техники'))section='Фотографии техники';
    if(node.tagName==='BUTTON'&&/Удалить ошибочную заявку/.test(node.textContent||''))section='Дополнительные действия';
    if(typeof costForm!=='undefined'&&node.tagName==='FORM'&&node===costForm)section='Работы и запчасти';
    if(typeof search!=='undefined'&&node===search)section='Работы и запчасти';
