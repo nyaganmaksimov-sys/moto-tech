@@ -1095,7 +1095,46 @@ if(!['Выдан','Отклонён','Завершено','Возвращён'].
  uploadForm.onsubmit=async event=>{event.preventDefault();if(submit.disabled)return;const images=Array.from(files.files||[]);if(!images.length||images.length>15)return msg('Выберите от 1 до 15 фотографий');if(images.some(file=>!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>8388608))return msg('Допустимы JPG, PNG или WebP до 8 МБ');submit.disabled=true;const uploadedPaths=[];try{const user=(await db.auth.getUser()).data.user;if(!user)throw new Error('Необходим вход');for(let i=0;i<images.length;i++){const file=images[i],ext=file.type==='image/png'?'png':file.type==='image/webp'?'webp':'jpg',path=user.id+'/'+crypto.randomUUID()+'/extra_'+(i+1)+'.'+ext;const response=await db.storage.from('moto-intake-private').upload(path,file,{contentType:file.type,upsert:false});if(response.error)throw response.error;uploadedPaths.push(path)}const attached=await db.rpc('attach_extra_intake_photos',{p_record:r.id,p_kind:table==='orders'?'repair':'storage',p_paths:uploadedPaths});if(attached.error)throw attached.error;msg('Фотографии добавлены: '+attached.data);await openRecord(table,id)}catch(error){msg('Ошибка загрузки фото: '+error.message);submit.disabled=false}};
  gallery.append(uploadForm)
 }
-const photos=await db.from('vehicle_intake_photos').select('id,kind,object_path,defect_description,created_at').eq('vehicle_id',r.vehicle_id).order('created_at',{ascending:true});if(photos.error){gallery.append(elt('p','Не удалось загрузить фотографии: '+photos.error.message))}else{const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px';const names={front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',damage:'Повреждение',other:'Дополнительное фото'};for(const p of photos.data||[]){const card=elt('div','','item');const label=elt('b',names[p.kind]||p.kind);card.append(label);const signed=await db.storage.from('moto-intake-private').createSignedUrl(p.object_path,120);if(!signed.error){const image=document.createElement('img');image.src=signed.data.signedUrl;image.alt=label.textContent;image.style.cssText='display:block;width:100%;height:120px;object-fit:cover;border-radius:8px;margin:8px 0;cursor:pointer';image.onclick=()=>window.open(signed.data.signedUrl,'_blank','noopener,noreferrer');card.append(image)}else card.append(elt('small','Фото не загрузилось'));if(p.defect_description)card.append(elt('small',p.defect_description));if(['damage','other'].includes(p.kind)&&['owner_manager','manager','administrator'].includes(staff.role)){const remove=elt('button','Убрать фото из карточки');remove.type='button';remove.className='secondary';remove.onclick=async()=>{if(!confirm('Убрать фото из карточки? Файл останется в защищённом хранилище.'))return;if(!await confirmActionPin())return;remove.disabled=true;const res=await db.rpc('admin_remove_vehicle_photo',{p_photo:p.id});if(res.error){msg(res.error.message);remove.disabled=false}else await openRecord(table,id)};card.append(remove)}grid.append(card)}gallery.append(grid)}panel.append(gallery)}
+const photos=await db.from('vehicle_intake_photos').select('id,kind,object_path,defect_description,created_at').eq('vehicle_id',r.vehicle_id).order('created_at',{ascending:true});if(photos.error){gallery.append(elt('p','Не удалось загрузить фотографии: '+photos.error.message))}else{const grid=document.createElement('div');grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px';const names={front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',damage:'Повреждение',other:'Дополнительное фото'};for(const p of photos.data||[]){const card=elt('div','','item');const label=elt('b',names[p.kind]||p.kind);card.append(label);const signed=await db.storage.from('moto-intake-private').createSignedUrl(p.object_path,120);if(!signed.error){const image=document.createElement('img');image.src=signed.data.signedUrl;image.alt=label.textContent;image.style.cssText='display:block;width:100%;height:120px;object-fit:cover;border-radius:8px;margin:8px 0;cursor:pointer';image.onclick=()=>window.open(signed.data.signedUrl,'_blank','noopener,noreferrer');card.append(image)}else card.append(elt('small','Фото не загрузилось'));if(p.defect_description)card.append(elt('small',p.defect_description));if(['owner_manager','manager','administrator'].includes(staff.role)){
+ const edit=elt('button','Редактировать');edit.type='button';edit.className='secondary';edit.style.marginRight='6px';
+ edit.onclick=async()=>{
+  const description=prompt('Описание фотографии:',p.defect_description||'');
+  if(description===null)return;
+  if(description.length>1200)return msg('Описание слишком длинное (до 1200 символов)');
+  if(!await confirmActionPin())return;
+  edit.disabled=true;
+  const changed=await db.from('vehicle_intake_photos').update({defect_description:description.trim()||null}).eq('id',p.id).select('id');
+  if(changed.error || !changed.data?.length){msg('Не удалось сохранить описание: '+(changed.error?.message||'Нет разрешения'));edit.disabled=false;return}
+  msg('Описание фотографии обновлено');await openRecord(table,id);
+ };
+ card.append(edit);
+ const replace=document.createElement('input');replace.type='file';replace.accept='image/jpeg,image/png,image/webp';replace.style.display='none';
+ const replaceButton=elt('button','Заменить фото');replaceButton.type='button';replaceButton.className='secondary';
+ replaceButton.onclick=()=>replace.click();
+ replace.onchange=async()=>{
+  const file=replace.files?.[0];if(!file)return;
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>8388608){msg('Допустимы JPG, PNG, WebP до 8 МБ');return}
+  if(!confirm('Заменить изображение? Предыдущий файл останется в защищённом архиве.'))return;
+  if(!await confirmActionPin())return;
+  replaceButton.disabled=true;
+  let path=null;
+  try{
+   const user=(await db.auth.getUser()).data.user;if(!user)throw new Error('Необходим вход');
+   const ext=file.type==='image/png'?'png':file.type==='image/webp'?'webp':'jpg';
+   path=user.id+'/photo-revisions/'+p.id+'/'+crypto.randomUUID()+'.'+ext;
+   const upload=await db.storage.from('moto-intake-private').upload(path,file,{contentType:file.type,upsert:false});
+   if(upload.error)throw upload.error;
+   const changed=await db.from('vehicle_intake_photos').update({object_path:path}).eq('id',p.id).eq('object_path',p.object_path).select('id');
+   if(changed.error||!changed.data?.length)throw new Error(changed.error?.message||'Фото изменено другим сотрудником или недостаточно прав');
+   msg('Фотография заменена');await openRecord(table,id);
+  }catch(error){
+   if(path)await db.storage.from('moto-intake-private').remove([path]).catch(()=>{});
+   msg('Не удалось заменить фотографию: '+error.message);replaceButton.disabled=false;
+  }
+ };
+ card.append(replaceButton,replace);
+}
+if(['damage','other'].includes(p.kind)&&['owner_manager','manager','administrator'].includes(staff.role)){const remove=elt('button','Удалить');remove.type='button';remove.className='secondary';remove.onclick=async()=>{if(!confirm('Убрать фото из карточки? Файл останется в защищённом хранилище.'))return;if(!await confirmActionPin())return;remove.disabled=true;const res=await db.rpc('admin_remove_vehicle_photo',{p_photo:p.id});if(res.error){msg(res.error.message);remove.disabled=false}else await openRecord(table,id)};card.append(remove)}grid.append(card)}gallery.append(grid)}panel.append(gallery)}
  if(r.vehicle_id){const damages=await db.from('vehicle_intake_photos').select('kind,object_path,defect_description,created_at').eq('vehicle_id',r.vehicle_id).eq('kind','damage').order('created_at',{ascending:true});panel.append(elt('h3','Состояние при приёмке — сверка перед выдачей'));if(damages.error){panel.append(elt('p','Не удалось загрузить дефекты: '+damages.error.message,'muted'))}else if(!damages.data.length){panel.append(elt('p','Отдельные повреждения при приёмке не зафиксированы','muted'))}else{for(const [i,p] of damages.data.entries()){const line=elt('div','','item');line.append(elt('p','Дефект №'+(i+1)+': '+(p.defect_description||'Описание отсутствует'),'muted'));const b=elt('button','Открыть исходное фото');b.type='button';b.onclick=async()=>{const url=await db.storage.from('moto-intake-private').createSignedUrl(p.object_path,60);if(url.error)msg(url.error.message);else window.open(url.data.signedUrl,'_blank','noopener,noreferrer')};line.append(b);panel.append(line)}}}
 if(table==='orders'){
  if(r.status==='Ожидает подтверждения'&&['owner_manager','manager','administrator'].includes(staff.role)){for(const [approve,label] of [[true,'Подтвердить заказ'],[false,'Отклонить заказ']]){const btn=elt('button',label);btn.onclick=async()=>{btn.disabled=true;const q=await db.rpc('approve_mechanic_order',{p_order:id,p_approve:approve});if(q.error){msg(q.error.message);btn.disabled=false}else await openRecord('orders',id)};panel.append(btn)}}
