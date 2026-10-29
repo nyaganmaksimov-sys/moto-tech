@@ -1,6 +1,6 @@
 {
   "name": "moto-tech-desktop",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "description": "MOTO TECH Service desktop client",
   "main": "main.js",
@@ -40,6 +40,17 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "MOTO TECH"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "nyaganmaksimov-sys",
+        "repo": "moto-tech",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.6.2"
   }
 }
