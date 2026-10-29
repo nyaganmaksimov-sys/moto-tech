@@ -19,6 +19,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Prepare app icon
+        run: |
+          mkdir -p app/src/main/res/drawable-nodpi
+          base64 -d app/src/main/assets/moto_tech_icon.webp.base64 > app/src/main/res/drawable-nodpi/moto_tech_icon.webp
       - name: Check signing secrets
         env:
           KEYSTORE: ${{ secrets.MOTO_ANDROID_KEYSTORE_BASE64 }}
@@ -43,6 +47,7 @@ jobs:
           VERSION=$(grep -oE 'versionName = "[^"]+"' app/build.gradle.kts | head -1 | cut -d '"' -f2)
           TAG="v$VERSION"
           cp app/build/outputs/apk/release/app-release.apk "MOTO-TECH-android-$VERSION.apk"
+          test ! -z "$VERSION"
           gh release create "$TAG" "MOTO-TECH-android-$VERSION.apk" --repo "$GITHUB_REPOSITORY" --title "MOTO TECH Android $VERSION" --notes "Signed Android release. Install updates over an existing version signed with the same certificate." --latest
       - name: Remove temporary signing key
         if: always()
