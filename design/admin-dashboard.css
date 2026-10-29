@@ -1,38 +1,60 @@
-/* MOTO TECH admin workspace v1. Safe, layout-only overrides. */
-body.mt-admin #sidebar{width:210px;padding:14px 10px}
-body.mt-admin #sidebar button{font-size:13px;padding:10px 12px;margin:2px 0}
-body.mt-admin #appShell main{max-width:1320px;margin:16px auto}
-body.mt-admin #sectionTitle{font-size:22px;margin:4px 0 14px}
-body.mt-admin #overviewSection>.card:first-of-type{padding:12px 15px;margin-bottom:12px}
-body.mt-admin #overviewSection>.card:first-of-type h3{display:none}
-body.mt-admin #orderQuickSearch{margin:0}
-body.mt-admin #roleWorkspace,body.mt-admin #overviewMetrics,body.mt-admin #quickIntakeActions{display:none!important}
-body.mt-admin #overviewSection>h3{display:none}
-body.mt-admin #overviewStatusCards{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important;margin:12px 0 18px!important}
-body.mt-admin #overviewStatusCards .card{margin:0;padding:14px;background:#202733}
-body.mt-admin #overviewStatusCards .card b{font-size:28px}
-body.mt-admin #overviewStatusCards .card small:last-child{display:none}
-body.mt-admin #overviewRecentOrders{display:grid;gap:7px}
-body.mt-admin .recent-order-card{display:grid;grid-template-columns:1fr auto;gap:5px 12px;margin:0;padding:11px 14px}
-body.mt-admin .recent-order-description{grid-column:1;margin:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-body.mt-admin .recent-order-card>small{grid-column:1}
-body.mt-admin .recent-order-card>button{grid-column:2;grid-row:1/4;align-self:center}
-.mt-admin-actions{display:flex;gap:10px;margin-bottom:14px}
-.mt-intake-picker[hidden]{display:none!important}
-.mt-intake-picker{position:fixed;inset:0;z-index:11000;background:rgba(0,0,0,.76);display:grid;place-items:center;padding:16px}
-.mt-intake-dialog{width:min(420px,100%);background:#202834;border:1px solid #445166;border-radius:16px;padding:22px}
-.mt-intake-dialog .mt-choice{display:block;width:100%;text-align:left;margin:9px 0}
-.mt-intake-dialog .mt-close{float:right;background:#343d4c}
-#mtMobileBottom{display:none}
-@media(max-width:800px){
- body.mt-admin #mobileNavToggle{display:none}
- body.mt-admin #appShell main{margin:12px auto 90px;padding:0 12px}
- body.mt-admin #overviewStatusCards{grid-template-columns:repeat(2,minmax(0,1fr))!important}
- body.mt-admin .mt-admin-actions{display:block}
- body.mt-admin .mt-admin-actions button{width:100%;min-height:48px}
- body.mt-admin .mt-admin-actions button+button{display:none}
- body.mt-admin #mtMobileBottom{display:grid;position:fixed;bottom:0;left:0;right:0;z-index:9000;grid-template-columns:repeat(4,minmax(0,1fr));background:#191f2a;border-top:1px solid #354052;padding:7px 5px max(7px,env(safe-area-inset-bottom))}
- body.mt-admin #mtMobileBottom button{background:transparent;border:0;font-size:12px;min-width:0;padding:7px 3px;color:#bec6d1}
- body.mt-admin #mtMobileBottom button.active{color:#ff7480}
- body.mt-admin #mtMobileBottom button span{display:block;font-size:19px}
+/* MOTO TECH — adaptive admin dashboard. Layout only; no business logic changes. */
+body.mt-admin { --mt-gap:12px; }
+body.mt-admin *, body.mt-admin *::before, body.mt-admin *::after { box-sizing:border-box; }
+body.mt-admin #appShell { min-width:0; }
+body.mt-admin #appShell main { width:100%;max-width:none;min-width:0;margin:0;padding:clamp(12px,1.2vw,24px); }
+body.mt-admin #sidebar { width:clamp(170px,11vw,215px);flex-shrink:0;padding:12px 8px; }
+body.mt-admin #sidebar button { font-size:12px;padding:10px 9px;margin:2px 0; }
+body.mt-admin #sectionTitle { font-size:clamp(18px,1.3vw,23px);margin:5px 0 12px; }
+body.mt-admin #overviewSection { width:100%;max-width:none;min-width:0; }
+body.mt-admin #overviewSection > .card:first-of-type {padding:10px 12px;margin-bottom:10px}
+body.mt-admin #orderQuickSearch {width:100%;min-width:0;margin:0}
+body.mt-admin #overviewStatusCards {display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:var(--mt-gap)!important;margin:10px 0!important}
+body.mt-admin #overviewStatusCards .card {min-width:0;margin:0;padding:12px 15px;background:#202733}
+body.mt-admin #overviewStatusCards .card b {font-size:clamp(22px,1.6vw,30px)}
+body.mt-admin #overviewRecentOrders {min-width:0;width:100%;overflow-x:auto}
+body.mt-admin .recent-order-card {display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;margin:0;padding:10px 12px;min-width:0}
+body.mt-admin .recent-order-description {grid-column:1;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.mt-admin .recent-order-card>small {grid-column:1}
+body.mt-admin .recent-order-card>button {grid-column:2;grid-row:1/4;align-self:center}
+body.mt-admin #overviewSection table {width:100%;border-collapse:collapse}
+body.mt-admin #overviewSection td,body.mt-admin #overviewSection th {padding:9px 10px;vertical-align:middle}
+body.mt-admin #overviewSection .card {min-width:0}
+body.mt-admin #overviewSection button {max-width:100%}
+body.mt-admin .mt-admin-actions {display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:8px 0 12px}
+body.mt-admin .mt-admin-actions button {white-space:normal}
+body.mt-admin #roleWorkspace {min-width:0}
+body.mt-admin #roleWorkspace .card,body.mt-admin #overviewSection .card {overflow-wrap:anywhere}
+/* Prevent work requests / notices from stretching into oversized empty cards. */
+body.mt-admin #overviewSection :is(.mechanic-work-card,.proposed-work-card,.work-request-card) {width:100%;min-width:0}
+body.mt-admin #overviewSection :is(.mechanic-work-grid,.proposed-works-grid,.work-requests-grid) {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:10px}
+.mt-intake-picker[hidden] {display:none!important}
+.mt-intake-picker {position:fixed;inset:0;z-index:11000;background:rgba(0,0,0,.76);display:grid;place-items:center;padding:16px}
+.mt-intake-dialog {width:min(420px,100%);background:#202834;border:1px solid #445166;border-radius:16px;padding:22px}
+.mt-intake-dialog .mt-choice {display:block;width:100%;text-align:left;margin:9px 0}
+.mt-intake-dialog .mt-close {float:right;background:#343d4c}
+#mtMobileBottom {display:none}
+@media(min-width:1500px) {
+ body.mt-admin #overviewSection {display:block}
+ body.mt-admin #overviewRecentOrders {max-height:min(50vh,560px);overflow-y:auto}
+ body.mt-admin #overviewSection :is(.mechanic-work-grid,.proposed-works-grid,.work-requests-grid) {grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+}
+@media(max-width:1100px) {
+ body.mt-admin #sidebar {width:165px}
+ body.mt-admin #overviewStatusCards {grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:800px) {
+ body.mt-admin #appShell main {margin:0;padding:12px 12px 92px}
+ body.mt-admin #overviewStatusCards {grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+ body.mt-admin .mt-admin-actions {display:grid;grid-template-columns:1fr 1fr}
+ body.mt-admin .mt-admin-actions button {min-width:0;min-height:44px}
+ body.mt-admin #overviewSection td,body.mt-admin #overviewSection th {padding:8px 6px}
+ body.mt-admin #mtMobileBottom {display:grid;position:fixed;bottom:0;left:0;right:0;z-index:9000;grid-template-columns:repeat(4,minmax(0,1fr));background:#191f2a;border-top:1px solid #354052;padding:7px 5px max(7px,env(safe-area-inset-bottom))}
+ body.mt-admin #mtMobileBottom button {background:transparent;border:0;font-size:12px;min-width:0;padding:7px 3px;color:#bec6d1}
+ body.mt-admin #mtMobileBottom button.active {color:#ff7480}
+ body.mt-admin #mtMobileBottom button span {display:block;font-size:19px}
+}
+@media(max-width:430px) {
+ body.mt-admin #overviewStatusCards .card {padding:10px}
+ body.mt-admin .mt-admin-actions {grid-template-columns:1fr}
 }
