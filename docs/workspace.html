@@ -1103,8 +1103,8 @@ const photos=await db.from('vehicle_intake_photos').select('id,kind,object_path,
   if(description.length>1200)return msg('Описание слишком длинное (до 1200 символов)');
   if(!await confirmActionPin())return;
   edit.disabled=true;
-  const changed=await db.from('vehicle_intake_photos').update({defect_description:description.trim()||null}).eq('id',p.id).select('id');
-  if(changed.error || !changed.data?.length){msg('Не удалось сохранить описание: '+(changed.error?.message||'Нет разрешения'));edit.disabled=false;return}
+  const changed=await db.rpc('admin_edit_vehicle_photo',{p_photo:p.id,p_description:description.trim()||' ',p_new_path:null,p_expected_path:null});
+  if(changed.error || changed.data!==true){msg('Не удалось сохранить описание: '+(changed.error?.message||'Нет разрешения'));edit.disabled=false;return}
   msg('Описание фотографии обновлено');await openRecord(table,id);
  };
  card.append(edit);
@@ -1124,8 +1124,8 @@ const photos=await db.from('vehicle_intake_photos').select('id,kind,object_path,
    path=user.id+'/photo-revisions/'+p.id+'/'+crypto.randomUUID()+'.'+ext;
    const upload=await db.storage.from('moto-intake-private').upload(path,file,{contentType:file.type,upsert:false});
    if(upload.error)throw upload.error;
-   const changed=await db.from('vehicle_intake_photos').update({object_path:path}).eq('id',p.id).eq('object_path',p.object_path).select('id');
-   if(changed.error||!changed.data?.length)throw new Error(changed.error?.message||'Фото изменено другим сотрудником или недостаточно прав');
+   const changed=await db.rpc('admin_edit_vehicle_photo',{p_photo:p.id,p_description:null,p_new_path:path,p_expected_path:p.object_path});
+   if(changed.error||changed.data!==true)throw new Error(changed.error?.message||'Фото изменено другим сотрудником или недостаточно прав');
    msg('Фотография заменена');await openRecord(table,id);
   }catch(error){
    if(path)await db.storage.from('moto-intake-private').remove([path]).catch(()=>{});
