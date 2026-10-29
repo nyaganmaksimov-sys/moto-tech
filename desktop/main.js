@@ -2,6 +2,8 @@
 const {app, BrowserWindow, shell, ipcMain, session, Menu} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const {dialog} = require('electron');
+const {autoUpdater} = require('electron-updater');
 
 const DEFAULT_APP_URL = 'https://nyaganmaksimov-sys.github.io/moto-tech/workspace.html';
 const configPath = () => path.join(app.getPath('userData'), 'desktop-config.json');
@@ -22,6 +24,36 @@ function allowed(target, home) {
   catch { return false; }
 }
 let win;
+let checking=false;
+function setupUpdater(){
+ autoUpdater.autoDownload=false;
+ autoUpdater.autoInstallOnAppQuit=false;
+ autoUpdater.on('update-available',async info=>{
+  if(!win||win.isDestroyed())return;
+  const answer=await dialog.showMessageBox(win,{title:'Обновление MOTO TECH',message:'Доступна версия '+info.version,detail:'Загрузить обновление? Установка выполняется отдельно, после сохранения заказов.',buttons:['Загрузить','Позже'],defaultId:1,cancelId:1});
+  if(answer.response===0)void autoUpdater.downloadUpdate().catch(showUpdateError);
+ });
+ autoUpdater.on('update-downloaded',async info=>{
+  if(!win||win.isDestroyed())return;
+  const answer=await dialog.showMessageBox(win,{title:'Обновление готово',message:'Версия '+info.version+' загружена',detail:'Сохраните открытые заказ-наряды перед перезапуском.',buttons:['Установить и перезапустить','Позже'],defaultId:1,cancelId:1});
+  if(answer.response===0)autoUpdater.quitAndInstall(false,true);
+ });
+ autoUpdater.on('error',showUpdateError);
+}
+function showUpdateError(err){
+ if(win&&!win.isDestroyed())void dialog.showMessageBox(win,{type:'warning',title:'MOTO TECH',message:'Ошибка обновления',detail:String(err?.message||err).slice(0,300)});
+}
+async function checkUpdates(manual=false){
+ if(!app.isPackaged){if(manual&&win)await dialog.showMessageBox(win,{message:'Проверка доступна в установленном приложении.'});return;}
+ if(checking)return;
+ checking=true;
+ try{
+  const data=await autoUpdater.checkForUpdates();
+  if(manual&&data?.updateInfo?.version===app.getVersion()&&win)
+   await dialog.showMessageBox(win,{message:'Установлена актуальная версия '+app.getVersion()});
+ }catch(err){if(manual)showUpdateError(err);}
+ finally{checking=false;}
+}
 function createWindow() {
   win = new BrowserWindow({
     width:1440, height:900, minWidth:900, minHeight:650,
@@ -34,7 +66,12 @@ function createWindow() {
       partition:'persist:mototech'
     }
   });
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'MOTO TECH',submenu:[
+ {label:'Проверить обновления',click:()=>void checkUpdates(true)},
+ {label:'Версия '+app.getVersion(),enabled:false},
+ {type:'separator'},{label:'Выход',role:'quit'}]}]));
+  setupUpdater();
+  win.webContents.once('did-finish-load',()=>setTimeout(()=>void checkUpdates(false),15000));
   const ses=win.webContents.session;
   // Permissions are limited to the configured application's own HTTPS origin.
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
