@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.webkit.*
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -16,13 +17,17 @@ class MainActivity : Activity() {
  private lateinit var info:TextView
  private var fileCallback:ValueCallback<Array<Uri>>?=null
  private val fileRequest=3001
+ private lateinit var updates:UpdateManager
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
+  updates=UpdateManager(this)
   val layout=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(0xff101319.toInt())}
   val bar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=100}
   info=TextView(this).apply{setTextColor(0xfff5f5f5.toInt());text="MOTO TECH · подключение...";setPadding(12,8,12,8)}
   web=WebView(this)
+  val updateButton=Button(this).apply{text="Проверить обновления";setOnClickListener{updates.check(true)}}
+  layout.addView(updateButton,LinearLayout.LayoutParams(-1,48))
   layout.addView(info);layout.addView(bar,LinearLayout.LayoutParams(-1,4))
   layout.addView(web,LinearLayout.LayoutParams(-1,0,1f))
   setContentView(layout)
@@ -53,6 +58,7 @@ class MainActivity : Activity() {
    }
   }
   web.loadUrl(home)
+  updates.check(false)
  }
  @Deprecated("Deprecated in Java")
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
@@ -61,5 +67,5 @@ class MainActivity : Activity() {
  }
  @Deprecated("Deprecated in Java")
  override fun onBackPressed(){if(web.canGoBack())web.goBack() else super.onBackPressed()}
- override fun onDestroy(){web.destroy();super.onDestroy()}
+ override fun onDestroy(){updates.dispose();web.destroy();super.onDestroy()}
 }
