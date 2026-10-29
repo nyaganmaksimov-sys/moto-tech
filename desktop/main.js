@@ -3,10 +3,11 @@ const {app, BrowserWindow, shell, ipcMain, session, Menu} = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const DEFAULT_APP_URL = 'https://nyaganmaksimov-sys.github.io/moto-tech/workspace.html';
 const configPath = () => path.join(app.getPath('userData'), 'desktop-config.json');
 function configuredUrl() {
   try { return JSON.parse(fs.readFileSync(configPath(), 'utf8')).url || null; }
-  catch { return null; }
+  catch { return DEFAULT_APP_URL; }
 }
 function validUrl(input) {
   try {
