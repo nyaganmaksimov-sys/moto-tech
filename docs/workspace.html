@@ -590,11 +590,12 @@ const db=createClient('https://kjgalcvxxjnapcaocvry.supabase.co','sb_publishable
 const $=id=>document.getElementById(id);let staff=null;const requestedVehicle=new URLSearchParams(location.search).get('vehicle');const requestedOrder=new URLSearchParams(location.search).get('order');const requestedStorage=new URLSearchParams(location.search).get('storage');const validRecord=(s)=>/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(s||'')?s:null;const validOrder=validRecord(requestedOrder),validStorage=validRecord(requestedStorage);const validVehicle=/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedVehicle||'')?requestedVehicle:null;
 function msg(t){$('msg').textContent=t||''}
 const mtReleaseHistory=[
+ {version:'2026.10.30.3',date:'2026-10-30',title:'Уведомления о новых обновлениях',areas:['Обновления','Интерфейс ПК и Android'],changes:['Автоматическая проверка новых версий','Уведомление с перечнем изменений и затронутых разделов','Кнопки «Обновить сейчас» и «Позже»']},
  {version:'0.4.0',date:'2026-10-30',title:'Приложения Windows и Android',areas:['Приложения','Обновления'],changes:['Добавлена кнопка проверки обновлений','Добавлены проверки новых версий EXE и APK','Подготовлены новые сборки для Windows и Android']},
  {version:'2026.10.30.2',date:'2026-10-30',title:'Интерфейс заказов и прокрутка',areas:['Заказ-наряды','Приёмка','Интерфейс ПК и Android'],changes:['Редактирование существующего заказа открывается через форму приёмки','Обновлён порядок колонок активных заказов и добавлены контакты клиента','Добавлена вертикальная прокрутка при нехватке места','Фотографии доступны в шапке заказ-наряда']},
  {version:'2026.10.29',date:'2026-10-29',title:'Работа механиков и администраторов',areas:['Механики','Администрирование'],changes:['Доработаны управление работами и запросы запчастей','Улучшены уведомления о выполнении работ']}
 ];
-const mtCurrentWebRelease='2026.10.30.2';
+const mtCurrentWebRelease='2026.10.30.3';
 function mtShowReleaseHistory(auto=false){
  let modal=document.getElementById('mtReleaseHistoryDialog');
  if(!modal){
@@ -615,6 +616,32 @@ function mtShowReleaseHistory(auto=false){
 }
 document.getElementById('mtUpdateHistory')?.addEventListener('click',()=>mtShowReleaseHistory());
 window.addEventListener('load',()=>{try{if(localStorage.getItem('mtSeenWebRelease')!==mtCurrentWebRelease)setTimeout(()=>mtShowReleaseHistory(true),1200)}catch(_){}},{once:true});
+let mtUpdateOfferVersion=null;
+async function mtCheckWebRelease(){
+ try{
+  const response=await fetch('./update-manifest.json?t='+Date.now(),{cache:'no-store'});
+  if(!response.ok)return;
+  const latest=await response.json();
+  if(!latest.version||latest.version===mtCurrentWebRelease||latest.version===mtUpdateOfferVersion)return;
+  const dismissed=sessionStorage.getItem('mtUpdateDismissed');
+  if(dismissed===latest.version)return;
+  mtUpdateOfferVersion=latest.version;
+  let dialog=document.getElementById('mtNewVersionDialog');
+  if(!dialog){dialog=document.createElement('dialog');dialog.id='mtNewVersionDialog';dialog.style.cssText='background:#192230;color:#edf1f7;border:1px solid #536477;border-radius:14px;width:min(480px,calc(100vw - 24px));max-height:80dvh;overflow:auto;padding:20px';document.body.append(dialog)}
+  dialog.replaceChildren();
+  dialog.append(elt('h2','Доступно обновление MOTO TECH'));
+  dialog.append(elt('p','Версия '+latest.version+' · '+(latest.date||'')));
+  dialog.append(elt('strong',latest.title||'Новые изменения'));
+  dialog.append(elt('p','Затронутые разделы: '+(latest.areas||[]).join(', '),'muted'));
+  const ul=document.createElement('ul');for(const change of latest.changes||[]){ul.append(elt('li',change))}dialog.append(ul);
+  const buttons=elt('div','','row');
+  const update=elt('button','Обновить сейчас');update.type='button';update.onclick=()=>{if(!confirm('Сохранены ли введённые данные? Обновление перезагрузит страницу.'))return;const url=new URL(location.href);url.searchParams.set('mt_refresh',Date.now());location.replace(url.toString())};
+  const later=elt('button','Позже','secondary');later.type='button';later.onclick=()=>{sessionStorage.setItem('mtUpdateDismissed',latest.version);dialog.close()};
+  buttons.append(update,later);dialog.append(buttons);
+  if(!dialog.open)dialog.showModal();
+ }catch(error){console.warn('MOTO TECH update check:',error)}
+}
+window.addEventListener('load',()=>{void mtCheckWebRelease();setInterval(()=>void mtCheckWebRelease(),5*60*1000)},{once:true});
 async function mtRequestAppUpdate(){
  const button=$('mtCheckAppUpdate');if(button)button.disabled=true;
  try{
