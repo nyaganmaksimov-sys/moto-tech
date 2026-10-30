@@ -1016,6 +1016,21 @@ async function mtAdminRecordEditor(table,id,record,panel){
   else{input=document.createElement('input');input.type=type;if(type==='number'){input.min='0';input.step='0.01'}}
   input.value=record[key]??'';inputs[key]=input;field.append(input);form.append(field);
  }
+ const related={};
+ if(table==='orders'){
+  const links=[['customers',record.customer_id,[['full_name','Имя клиента'],['phone','Телефон']]],['vehicles',record.vehicle_id,[['brand','Марка'],['model','Модель'],['year','Год'],['plate','Госномер'],['vin','VIN'],['mileage','Пробег']]]];
+  for(const [kind,recordId,columns] of links){
+   if(!recordId)continue;
+   const item=await db.from(kind).select('*').eq('id',recordId).maybeSingle();
+   if(item.error||!item.data)continue;
+   for(const [key,label] of columns){
+    const field=document.createElement('label');field.style.cssText='display:grid;gap:5px;min-width:0';field.textContent=label;
+    const input=document.createElement('input');input.type=['year','mileage'].includes(key)?'number':'text';if(input.type==='number')input.min='0';
+    input.value=item.data[key]??'';field.append(input);form.append(field);
+    related[kind+':'+key]={kind,recordId,key,input,old:item.data[key]};
+   }
+  }
+ }
  const save=elt('button','Сохранить изменения');save.type='submit';
  const helper=elt('small','Для изменения требуется личный PIN. Изменения выполняются в общей базе.');helper.style.gridColumn='1/-1';form.append(helper,save);
  form.onsubmit=async event=>{
@@ -1028,11 +1043,25 @@ async function mtAdminRecordEditor(table,id,record,panel){
    if(type==='number' && (!Number.isFinite(Number(raw)) || Number(raw)<0))return msg('Проверьте сумму');
    changes[key]=type==='number'?Number(raw):raw===''?null:raw;
   }
-  if(!Object.keys(changes).length)return msg('Нет изменений');
+  const extra=[];
+  for(const item of Object.values(related)){
+   const raw=item.input.value.trim(),old=item.old===null||item.old===undefined?'':String(item.old);
+   if(raw===old)continue;
+   const value=item.input.type==='number'?(raw===''?null:Number(raw)):(raw===''?null:raw);
+   if(item.input.type==='number'&&raw!==''&&(!Number.isFinite(value)||value<0))return msg('Проверьте числовые поля');
+   extra.push({...item,value});
+  }
+  if(!Object.keys(changes).length&&!extra.length)return msg('Нет изменений');
   if(!await confirmActionPin())return;
   save.disabled=true;
-  const updated=await db.from(table).update(changes).eq('id',id).select('id').maybeSingle();
-  if(updated.error||!updated.data){msg('Не удалось сохранить: '+(updated.error?.message||'Нет доступа'));save.disabled=false;return}
+  if(Object.keys(changes).length){
+   const updated=await db.from(table).update(changes).eq('id',id).select('id').maybeSingle();
+   if(updated.error||!updated.data){msg('Не удалось сохранить заказ: '+(updated.error?.message||'Нет доступа'));save.disabled=false;return}
+  }
+  for(const item of extra){
+   const updated=await db.from(item.kind).update({[item.key]:item.value}).eq('id',item.recordId).select('id').maybeSingle();
+   if(updated.error||!updated.data){msg('Часть изменений сохранена. Ошибка поля «'+item.key+'»: '+(updated.error?.message||'Нет доступа'));save.disabled=false;return}
+  }
   msg('Изменения сохранены');await openRecord(table,id);await loadTab(table);
  };
  wrap.append(form);panel.append(wrap);
@@ -1083,6 +1112,7 @@ try{
     statusForm.append(label,select,note,save);header.append(statusForm);
    }
    panel.append(header);
+   const adminEditor=panel.querySelector('#mtFullOrderEditor');if(adminEditor)header.after(adminEditor);
    if(staff.role!=='mechanic'){
     const lines=await db.from('order_cost_items').select('item_type,name,quantity,unit_price').eq('order_id',id);
     if(!lines.error){const items=lines.data||[];const work=items.filter(x=>x.item_type==='work'),parts=items.filter(x=>x.item_type==='part'),storage=items.filter(x=>x.item_type==='storage');
