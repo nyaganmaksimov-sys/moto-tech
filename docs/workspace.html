@@ -704,6 +704,25 @@ function installPartsListControls(records){
   for(const status of [null,...statuses]){const count=status===null?records.length:records.filter(x=>String(x.status||'Без статуса')===status).length;
    const chip=elt('button',(status===null?'Все':mtPartStatusLabel(status))+' · '+count,'mt-order-chip');chip.type='button';chip.classList.toggle('active',selected===status);chip.onclick=()=>{selected=status;chips();update()};filters.append(chip)}
  }
+ if(['owner_manager','manager','administrator'].includes(staff?.role)){
+   Array.from(list.children).forEach((card,i)=>{
+     const entry=records[i];if(!entry?.id||card.querySelector('.mt-admin-part-edit'))return;
+     const edit=elt('button','Редактировать заявку','secondary mt-admin-part-edit');edit.type='button';
+     edit.onclick=async()=>{
+       const name=prompt('Название запчасти',entry.name||'');if(name===null)return;
+       if(!name.trim()||name.length>200)return msg('Укажите корректное название');
+       const quantityText=prompt('Количество',String(entry.quantity??1));if(quantityText===null)return;
+       const quantity=Number(quantityText.replace(',','.'));
+       if(!Number.isFinite(quantity)||quantity<=0)return msg('Количество должно быть больше нуля');
+       if(!await confirmActionPin())return;
+       edit.disabled=true;
+       const result=await db.from('part_requests').update({name:name.trim(),quantity}).eq('id',entry.id).select('id').maybeSingle();
+       if(result.error||!result.data){msg('Не удалось обновить заявку: '+(result.error?.message||'Нет прав'));edit.disabled=false;return}
+       msg('Заявка обновлена');await loadTab('part_requests');
+     };
+     card.append(edit);
+   });
+ }
  toolbar.querySelector('input').oninput=update;chips();update();
 }
 
