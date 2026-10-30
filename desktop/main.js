@@ -106,6 +106,11 @@ function loadHome(){
 function showSetup(message) {
   win.loadFile(path.join(__dirname,'setup.html'), {query:message?{error:message}:{}});
 }
+ipcMain.handle('desktop:check-updates',async(event)=>{
+ if(event.sender!==win?.webContents || !allowed(event.sender.getURL(),DEFAULT_APP_URL))return {error:'Недопустимый запрос'};
+ await checkUpdates(true);
+ return {ok:true};
+});
 ipcMain.handle('desktop:save-url',async (event,input)=>{
   if(event.sender !== win?.webContents || !event.sender.getURL().startsWith('file:')) return {error:'Недопустимый запрос'};
   const url=validUrl(input);
