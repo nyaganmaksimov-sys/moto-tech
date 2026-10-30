@@ -1689,6 +1689,17 @@ async function loadAuditLog(){
   }
  }
  if(x.details?.order_number)item.append(elt('small','Заказ: '+x.details.order_number));
+ if(x.details?.changes && typeof x.details.changes==='object'){
+  for(const [field,change] of Object.entries(x.details.changes)){
+   if(!change||typeof change!=='object')continue;
+   const previous=change.old??change.before;
+   const current=change.new??change.after;
+   if(JSON.stringify(previous)===JSON.stringify(current))continue;
+   item.append(elt('small',(labels[field]||field)+': '+format(previous)+' → '+format(current)));
+  }
+ }
+ if(x.details?.reason)item.append(elt('small','Комментарий: '+String(x.details.reason)));
+
  if(x.details?.state==='requires_financial_review')item.append(elt('small','Ожидает проверки финансовой корректировки'));
  box.append(item)}
 }
