@@ -26,12 +26,12 @@ function allowed(target, home) {
 let win;
 let checking=false;
 function setupUpdater(){
- autoUpdater.autoDownload=false;
+ autoUpdater.autoDownload=true;
  autoUpdater.autoInstallOnAppQuit=false;
  autoUpdater.on('update-available',async info=>{
   if(!win||win.isDestroyed())return;
-  const answer=await dialog.showMessageBox(win,{title:'Обновление MOTO TECH',message:'Доступна версия '+info.version,detail:'Загрузить обновление? Установка выполняется отдельно, после сохранения заказов.',buttons:['Загрузить','Позже'],defaultId:1,cancelId:1});
-  if(answer.response===0)void autoUpdater.downloadUpdate().catch(showUpdateError);
+  const answer=await dialog.showMessageBox(win,{title:'Обновление MOTO TECH',message:'Доступна версия '+info.version,detail:'Обновление загружается автоматически. По завершении вы сможете установить его в удобное время.',buttons:['Понятно'],defaultId:0,cancelId:0});
+  // electron-updater downloads automatically; installation still requires confirmation.
  });
  autoUpdater.on('update-downloaded',async info=>{
   if(!win||win.isDestroyed())return;
@@ -59,6 +59,7 @@ function createWindow() {
     width:1440, height:900, minWidth:900, minHeight:650,
     backgroundColor:'#0d1118', autoHideMenuBar:true,
     title:'MOTO TECH — Мотосервис',
+    icon:path.join(__dirname,'assets','icon.ico'),
     webPreferences:{
       preload:path.join(__dirname,'preload.js'),
       contextIsolation:true, nodeIntegration:false,
@@ -72,6 +73,8 @@ function createWindow() {
  {type:'separator'},{label:'Выход',role:'quit'}]}]));
   setupUpdater();
   win.webContents.once('did-finish-load',()=>setTimeout(()=>void checkUpdates(false),15000));
+  const updateInterval=setInterval(()=>void checkUpdates(false),6*60*60*1000);
+  win.on('closed',()=>clearInterval(updateInterval));
   const ses=win.webContents.session;
   // Permissions are limited to the configured application's own HTTPS origin.
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {

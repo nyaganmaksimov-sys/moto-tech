@@ -1,12 +1,16 @@
 name: Windows desktop test installer
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'feature/windows-desktop-installer'
+      - main
   pull_request:
     paths:
       - 'desktop/**'
       - '.github/workflows/windows-desktop.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: windows-latest
@@ -18,6 +22,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Build Windows icon
+        run: |
+          python -m pip install pillow
+          python -c "import base64,io,pathlib;from PIL import Image;p=pathlib.Path('assets');p.mkdir(exist_ok=True);im=Image.open(io.BytesIO(base64.b64decode((p/'moto_tech_icon.webp.base64').read_text()))).convert('RGBA').resize((256,256),Image.Resampling.LANCZOS);im.save(p/'icon.ico',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
       - run: npm install --no-audit --no-fund
       - run: npm run dist:win
         env:
@@ -27,3 +35,23 @@ jobs:
           name: MOTO-TECH-Windows-test-installer
           path: desktop/dist/*.exe
           if-no-files-found: error
+      - name: Publish Windows update on GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          shopt -s nullglob
+          ASSETS=(dist/*.exe dist/latest.yml dist/*.blockmap)
+          if (( ${#ASSETS[@]} < 2 )); then
+            echo 'Windows installer or latest.yml missing'
+            exit 1
+          fi
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "MOTO TECH $VERSION" --notes "Desktop and Android application updates. Windows installer may show a SmartScreen warning because it is not code-signed." --latest
+          fi
+          gh release upload "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+
