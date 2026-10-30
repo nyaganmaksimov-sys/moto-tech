@@ -24,7 +24,7 @@ jobs:
       - name: Build Windows icon
         run: |
           python -m pip install pillow
-          python -c "import base64,io,pathlib;from PIL import Image;p=pathlib.Path('assets');p.mkdir(exist_ok=True);im=Image.open(io.BytesIO(base64.b64decode((p/'moto_tech_icon.webp.base64').read_text()))).convert('RGBA');im.save(p/'icon.ico',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
+          python -c "import base64,io,pathlib;from PIL import Image;p=pathlib.Path('assets');p.mkdir(exist_ok=True);im=Image.open(io.BytesIO(base64.b64decode((p/'moto_tech_icon.webp.base64').read_text()))).convert('RGBA').resize((256,256),Image.Resampling.LANCZOS);im.save(p/'icon.ico',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])"
       - run: npm install --no-audit --no-fund
       - run: npm run dist:win
         env:
