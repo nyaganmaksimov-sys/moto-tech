@@ -1,6 +1,9 @@
 name: Windows desktop test installer
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'feature/windows-desktop-installer'
   pull_request:
     paths:
       - 'desktop/**'
