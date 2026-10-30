@@ -1113,6 +1113,40 @@ try{
    }
    panel.append(header);
    const adminEditor=panel.querySelector('#mtFullOrderEditor');if(adminEditor)header.after(adminEditor);
+   if(r.vehicle_id){
+    const strip=elt('div','','mt-order-header-photos');strip.style.cssText='display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin:12px 0 4px';
+    const title=elt('strong','Фотографии техники');title.style.cssText='width:100%;font-size:13px';strip.append(title);
+    const photoData=await db.from('vehicle_intake_photos').select('id,kind,object_path,defect_description').eq('vehicle_id',r.vehicle_id).order('created_at',{ascending:true});
+    const isAdmin=['owner_manager','manager','administrator'].includes(staff.role);
+    if(photoData.error){strip.append(elt('small','Ошибка загрузки фотографий: '+photoData.error.message))}
+    else if(!photoData.data?.length)strip.append(elt('small','Фотографии отсутствуют'));
+    else for(const photo of photoData.data){
+     const signed=await db.storage.from('moto-intake-private').createSignedUrl(photo.object_path,600);
+     const tile=elt('div','','mt-photo-tile');tile.style.cssText='width:100px;max-width:calc(33vw - 20px)';
+     const thumb=elt('button','','secondary');thumb.type='button';thumb.style.cssText='padding:0;display:block;width:100%;height:76px;overflow:hidden;border-radius:8px';
+     if(!signed.error){
+      const img=document.createElement('img');img.src=signed.data.signedUrl;img.alt='Фото '+photo.kind;img.style.cssText='width:100%;height:100%;object-fit:cover;display:block';thumb.append(img);
+     }else thumb.textContent='Фото';
+     const kinds={front:'Спереди',rear:'Сзади',left:'Слева',right:'Справа',damage:'Повреждение',other:'Доп. фото'};
+     const lbl=elt('small',kinds[photo.kind]||photo.kind);lbl.style.cssText='display:block;text-align:center;font-size:10px;margin-top:3px';
+     const actions=elt('div','','mt-photo-actions');actions.hidden=true;actions.style.cssText='display:none;position:relative;z-index:3;width:210px;max-width:calc(100vw - 50px);padding:10px;background:#151b26;border:1px solid #536072;border-radius:10px;gap:7px;flex-direction:column;margin-top:6px';
+     thumb.onclick=()=>{if(!isAdmin){if(!signed.error)window.open(signed.data.signedUrl,'_blank','noopener,noreferrer');return}const show=actions.style.display==='none';strip.querySelectorAll('.mt-photo-actions').forEach(x=>{x.style.display='none';x.hidden=true});actions.style.display=show?'flex':'none';actions.hidden=!show};
+     if(isAdmin){
+      const view=elt('button','Просмотр','secondary');view.type='button';view.onclick=()=>{if(!signed.error)window.open(signed.data.signedUrl,'_blank','noopener,noreferrer')};
+      const desc=document.createElement('input');desc.placeholder='Описание фото';desc.value=photo.defect_description||'';desc.maxLength=1500;
+      const saveDesc=elt('button','Сохранить описание','secondary');saveDesc.type='button';
+      saveDesc.onclick=async()=>{if(!await confirmActionPin())return;saveDesc.disabled=true;const result=await db.rpc('admin_edit_vehicle_photo',{p_photo:photo.id,p_description:desc.value,p_new_path:null,p_expected_path:photo.object_path});if(result.error){msg('Ошибка: '+result.error.message);saveDesc.disabled=false}else{msg('Описание сохранено');await openRecord(table,id)}};
+      const file=document.createElement('input');file.type='file';file.accept='image/jpeg,image/png,image/webp';file.style.maxWidth='190px';
+      const replace=elt('button','Заменить фото','secondary');replace.type='button';
+      replace.onclick=async()=>{const image=file.files?.[0];if(!image)return msg('Выберите новое фото');if(!['image/jpeg','image/png','image/webp'].includes(image.type)||image.size>8388608)return msg('Нужен JPG, PNG или WebP до 8 МБ');if(!await confirmActionPin())return;replace.disabled=true;const user=(await db.auth.getUser()).data.user;if(!user){msg('Войдите в систему');replace.disabled=false;return}const ext=image.type==='image/png'?'png':image.type==='image/webp'?'webp':'jpg';const newPath=user.id+'/'+crypto.randomUUID()+'/replacement.'+ext;const upload=await db.storage.from('moto-intake-private').upload(newPath,image,{contentType:image.type,upsert:false});if(upload.error){msg(upload.error.message);replace.disabled=false;return}const updated=await db.rpc('admin_edit_vehicle_photo',{p_photo:photo.id,p_description:desc.value,p_new_path:newPath,p_expected_path:photo.object_path});if(updated.error){msg('Не удалось заменить: '+updated.error.message);replace.disabled=false}else{msg('Фотография заменена');await openRecord(table,id)}};
+      const remove=elt('button','Удалить фото','secondary');remove.type='button';remove.onclick=async()=>{if(!confirm('Убрать фотографию из карточки техники?'))return;if(!await confirmActionPin())return;remove.disabled=true;const result=await db.rpc('admin_remove_vehicle_photo',{p_photo:photo.id});if(result.error){msg(result.error.message);remove.disabled=false}else{msg('Фото удалено из карточки');await openRecord(table,id)}};
+      actions.append(view,desc,saveDesc,file,replace,remove);
+     }
+     tile.append(thumb,lbl,actions);strip.append(tile);
+    }
+    header.append(strip);
+   }
+
    if(staff.role!=='mechanic'){
     const lines=await db.from('order_cost_items').select('item_type,name,quantity,unit_price').eq('order_id',id);
     if(!lines.error){const items=lines.data||[];const work=items.filter(x=>x.item_type==='work'),parts=items.filter(x=>x.item_type==='part'),storage=items.filter(x=>x.item_type==='storage');
@@ -1189,7 +1223,7 @@ if(table==='orders'&&r.mechanic_id){const mechanic=await db.from('staff').select
  const edit=elt('button','Редактировать заказ');edit.type='button';edit.onclick=()=>{
    const form=panel.querySelector('#mtFullOrderEditor');
    if(!form){msg('Форма редактирования недоступна для этой учётной записи');return}
-   form.open=!form.open;edit.textContent=form.open?'Скрыть редактирование':'Редактировать заказ';if(form.open){form.style.display='block';form.scrollIntoView({block:'nearest'});}
+   form.open=!form.open;form.hidden=false;form.style.setProperty('display','block','important');form.style.setProperty('visibility','visible','important');edit.textContent=form.open?'Скрыть редактирование':'Редактировать заказ';if(form.open){form.scrollIntoView({behavior:'auto',block:'start'});}
  };{const top=panel.querySelector('.compact-order-head');if(top){let bar=top.querySelector('.mt-order-top-actions');if(!bar){bar=document.createElement('div');bar.className='mt-order-top-actions';bar.style.cssText='display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 12px';top.prepend(bar)}bar.prepend(edit);const photosButton=elt('button','Фотографии','secondary');photosButton.type='button';photosButton.onclick=()=>{const gallery=panel.querySelector('#mtOrderPhotoGallery');if(gallery){gallery.style.outline='2px solid #cd3549';gallery.scrollIntoView({block:'start'});photosButton.textContent='Фотографии ↓'}else msg('Фотографии пока недоступны')};bar.append(photosButton)}else panel.prepend(edit)}
  if(['owner_manager','manager','administrator'].includes(staff.role)){const del=elt('button','Удалить ошибочную заявку');del.type='button';del.className='secondary';del.onclick=async()=>{const reason=prompt('Причина удаления (от 5 символов)');if(reason===null)return;if(reason.trim().length<5)return msg('Укажите причину');if(!confirm('Удалить заявку '+r.order_number+' из рабочих списков? История сохранится.'))return;if(!await confirmActionPin())return;del.disabled=true;const res=await db.rpc('admin_archive_bad_order',{p_order:id,p_reason:reason.trim()});if(res.error){msg(res.error.message);del.disabled=false}else{$('vehicleOverlay').style.display='none';msg('Заявка архивирована');selectView('orders')}};panel.append(del)}
  }
