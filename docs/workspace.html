@@ -1668,13 +1668,13 @@ async function loadStaffNotifications(){
 async function loadAuditLog(){
  if(!staff||!['owner_manager','manager','administrator'].includes(staff.role))return;
  const box=$('auditItems');box.replaceChildren(elt('p','Загрузка журнала…','muted'));
- let q=db.from('staff_audit_log').select('created_at,actor_login,actor_name,action,entity,record_id,details').order('created_at',{ascending:false}).limit(200);
+ let q=db.from('staff_audit_log').select('id,created_at,actor_login,actor_name,action,entity,record_id,details').order('created_at',{ascending:false}).limit(200);
  if($('auditEmployee').value)q=q.eq('actor_login',$('auditEmployee').value);
  if($('auditAction').value)q=q.eq('action',$('auditAction').value);
  if($('auditFrom').value)q=q.gte('created_at',new Date($('auditFrom').value+'T00:00:00').toISOString());
  const r=await q;if(r.error){box.replaceChildren(elt('p','Ошибка загрузки: '+r.error.message,'muted'));return}
  box.replaceChildren();if(!r.data.length){box.append(elt('p','Событий по выбранным фильтрам нет','muted'));return}
- const verbs={insert:'Создание',update:'Изменение',delete:'Удаление',closed_order_correction_requested:'Запрошена корректировка закрытой сметы',replace_photo:'Заменена фотография',edit_photo_description:'Изменено описание фотографии',remove_photo:'Удалена фотография'};
+ const verbs={insert:'Создание',update:'Изменение',delete:'Удаление',closed_order_correction_requested:'Запрошена корректировка закрытой сметы',closed_order_correction_approved:'Подтверждена финансовая корректировка',replace_photo:'Заменена фотография',edit_photo_description:'Изменено описание фотографии',remove_photo:'Удалена фотография'};
  const tables={orders:'Заказ-наряд',storage_records:'Хранение',part_requests:'Запчасти',order_cost_items:'Смета',service_inventory:'Склад',customers:'Клиенты',vehicles:'Техника',vehicle_intake_photos:'Фотографии',crm_tasks:'CRM',price_items:'Прайс',service_finance_entries:'Финансы'};
  const labels={name:'Название',quantity:'Количество',unit_price:'Цена',status:'Статус',complaint:'Жалоба',mechanic_id:'Механик',monthly_rate:'Тариф',amount:'Сумма заказа',purchase_price:'Закупочная цена',location:'Местоположение',start_date:'Дата начала',end_date:'Дата окончания',return_date:'Дата возврата',terms:'Условия'};
  const format=a=>a===null||a===undefined||a===''?'—':typeof a==='object'?JSON.stringify(a):String(a);
@@ -1700,7 +1700,19 @@ async function loadAuditLog(){
  }
  if(x.details?.reason)item.append(elt('small','Комментарий: '+String(x.details.reason)));
 
- if(x.details?.state==='requires_financial_review')item.append(elt('small','Ожидает проверки финансовой корректировки'));
+ if(x.details?.state==='requires_financial_review'){
+  const status=elt('small','Запрошена финансовая корректировка');item.append(status);
+  const approve=elt('button','Подтвердить корректировку');approve.type='button';
+  approve.onclick=async()=>{
+   if(!confirm('Подтвердить отдельную финансовую корректировку? Исходный закрытый заказ не изменится.'))return;
+   if(!await confirmActionPin())return;
+   approve.disabled=true;
+   const result=await db.rpc('approve_closed_order_adjustment',{p_audit_id:x.id});
+   if(result.error){msg('Ошибка подтверждения: '+result.error.message);approve.disabled=false;return}
+   msg('Корректировка подтверждена');await loadAuditLog();
+  };
+  item.append(approve);
+ }
  box.append(item)}
 }
 async function loadAuditEmployees(){const s=$('auditEmployee');if(s.options.length>1)return;const r=await db.from('staff').select('login,full_name').order('full_name');if(r.error)return;for(const x of r.data){if(!x.login)continue;const o=document.createElement('option');o.value=x.login;o.textContent=(x.full_name||x.login)+' ('+x.login+')';s.append(o)}}
