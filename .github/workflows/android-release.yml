@@ -48,7 +48,11 @@ jobs:
           TAG="v$VERSION"
           cp app/build/outputs/apk/release/app-release.apk "MOTO-TECH-android-$VERSION.apk"
           test ! -z "$VERSION"
-          gh release create "$TAG" "MOTO-TECH-android-$VERSION.apk" --repo "$GITHUB_REPOSITORY" --title "MOTO TECH Android $VERSION" --notes "Signed Android release. Install updates over an existing version signed with the same certificate." --latest
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "MOTO-TECH-android-$VERSION.apk" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" "MOTO-TECH-android-$VERSION.apk" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "MOTO TECH $VERSION" --notes "Signed Android release. Updates require the same signing certificate." --latest
+          fi
       - name: Remove temporary signing key
         if: always()
         run: rm -f release-signing.jks
