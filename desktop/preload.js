@@ -5,6 +5,9 @@ if (location.protocol === 'file:') {
     saveUrl:(url)=>ipcRenderer.invoke('desktop:save-url',url)
   });
 }
+if(location.protocol==='https:' && location.hostname==='nyaganmaksimov-sys.github.io' && location.pathname.startsWith('/moto-tech/')){
+  contextBridge.exposeInMainWorld('motoDesktop',{checkUpdates:()=>ipcRenderer.invoke('desktop:check-updates')});
+}
 // Optimize only the MOTO TECH page. Actual uploads and image URLs stay with the web app.
 if (location.protocol === 'https:' &&
     location.hostname === 'nyaganmaksimov-sys.github.io' &&
