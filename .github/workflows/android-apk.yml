@@ -36,3 +36,5 @@ jobs:
           name: MOTO-TECH-Android-test-APK
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+# Android 0.4.1 login recovery verification
