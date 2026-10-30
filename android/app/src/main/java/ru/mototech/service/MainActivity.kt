@@ -1,5 +1,6 @@
 package ru.mototech.service
 import android.annotation.SuppressLint
+import android.webkit.JavascriptInterface
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -17,6 +18,11 @@ class MainActivity : Activity() {
  private lateinit var info:TextView
  private var fileCallback:ValueCallback<Array<Uri>>?=null
  private val fileRequest=3001
+ inner class UpdateBridge {
+  @JavascriptInterface fun checkUpdates() {
+   runOnUiThread { updates.check(true) }
+  }
+ }
  private lateinit var updates:UpdateManager
  private var lastUpdateCheckAt:Long=0
  @SuppressLint("SetJavaScriptEnabled")
@@ -33,6 +39,7 @@ class MainActivity : Activity() {
   layout.addView(web,LinearLayout.LayoutParams(-1,0,1f))
   setContentView(layout)
   CookieManager.getInstance().setAcceptCookie(true)
+  web.addJavascriptInterface(UpdateBridge(),"MotoAndroid")
   web.settings.javaScriptEnabled=true
   web.settings.domStorageEnabled=true
   web.settings.cacheMode=WebSettings.LOAD_DEFAULT
