@@ -1674,6 +1674,8 @@ async function loadAuditLog(){
  if($('auditFrom').value)q=q.gte('created_at',new Date($('auditFrom').value+'T00:00:00').toISOString());
  const r=await q;if(r.error){box.replaceChildren(elt('p','Ошибка загрузки: '+r.error.message,'muted'));return}
  box.replaceChildren();if(!r.data.length){box.append(elt('p','Событий по выбранным фильтрам нет','muted'));return}
+ const corrections=await db.from('closed_order_adjustments').select('request_audit_id').limit(1000);
+ const alreadyApproved=new Set((corrections.data||[]).map(y=>Number(y.request_audit_id)));
  const verbs={insert:'Создание',update:'Изменение',delete:'Удаление',closed_order_correction_requested:'Запрошена корректировка закрытой сметы',closed_order_correction_approved:'Подтверждена финансовая корректировка',replace_photo:'Заменена фотография',edit_photo_description:'Изменено описание фотографии',remove_photo:'Удалена фотография'};
  const tables={orders:'Заказ-наряд',storage_records:'Хранение',part_requests:'Запчасти',order_cost_items:'Смета',service_inventory:'Склад',customers:'Клиенты',vehicles:'Техника',vehicle_intake_photos:'Фотографии',crm_tasks:'CRM',price_items:'Прайс',service_finance_entries:'Финансы'};
  const labels={name:'Название',quantity:'Количество',unit_price:'Цена',status:'Статус',complaint:'Жалоба',mechanic_id:'Механик',monthly_rate:'Тариф',amount:'Сумма заказа',purchase_price:'Закупочная цена',location:'Местоположение',start_date:'Дата начала',end_date:'Дата окончания',return_date:'Дата возврата',terms:'Условия'};
@@ -1701,6 +1703,7 @@ async function loadAuditLog(){
  if(x.details?.reason)item.append(elt('small','Комментарий: '+String(x.details.reason)));
 
  if(x.details?.state==='requires_financial_review'){
+  if(alreadyApproved.has(Number(x.id))){item.append(elt('small','Корректировка уже подтверждена'));box.append(item);continue}
   const status=elt('small','Запрошена финансовая корректировка');item.append(status);
   const approve=elt('button','Подтвердить корректировку');approve.type='button';
   approve.onclick=async()=>{
