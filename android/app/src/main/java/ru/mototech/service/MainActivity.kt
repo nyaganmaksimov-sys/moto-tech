@@ -18,6 +18,7 @@ class MainActivity : Activity() {
  private var fileCallback:ValueCallback<Array<Uri>>?=null
  private val fileRequest=3001
  private lateinit var updates:UpdateManager
+ private var lastUpdateCheckAt:Long=0
  @SuppressLint("SetJavaScriptEnabled")
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
@@ -58,7 +59,12 @@ class MainActivity : Activity() {
    }
   }
   web.loadUrl(home)
-  updates.check(false)
+ }
+ override fun onResume(){
+  super.onResume()
+  updates.promptInstall()
+  val now=System.currentTimeMillis()
+  if(now-lastUpdateCheckAt>6L*60L*60L*1000L){lastUpdateCheckAt=now;updates.check(false)}
  }
  @Deprecated("Deprecated in Java")
  override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){
