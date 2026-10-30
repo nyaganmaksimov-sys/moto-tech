@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'feature/android-app'
+      - main
   pull_request:
     paths:
       - 'android/**'
