@@ -1692,29 +1692,31 @@ async function renderMtOverviewSelection(){
  }
  const groups={'Ожидают подтверждения':['Ожидает подтверждения'],'В работе':['Принят','В работе','Диагностика','Ремонт'],'Готовы к выдаче':['Готов','Готов к выдаче']};
  let query=db.from(staff.role==='mechanic'?'mechanic_orders':'orders')
-  .select('id,order_number,status,complaint,created_at,vehicle_id,mechanic_id').is('deleted_at',null);
+  .select('id,order_number,status,complaint,created_at,vehicle_id,mechanic_id,customer_id').is('deleted_at',null);
  if(filter&&groups[filter])query=query.in('status',groups[filter]);
  const q=await query.order('created_at',{ascending:false}).limit(100);
  if(request!==mtOverviewRequest)return;
  if(q.error){root.replaceChildren(elt('p','Ошибка заказов: '+q.error.message,'muted'));return}
  const terminal=new Set(['Выдан','Отклонён','Завершено','Завершён','Отменён','Отменен','Архив']);
  const rows=(q.data||[]).filter(x=>!terminal.has(x.status));
- const vehicles=new Map(),mechanics=new Map(),ids=[...new Set(rows.map(x=>x.vehicle_id).filter(Boolean))],mids=[...new Set(rows.map(x=>x.mechanic_id).filter(Boolean))];
+ const vehicles=new Map(),mechanics=new Map(),customers=new Map(),ids=[...new Set(rows.map(x=>x.vehicle_id).filter(Boolean))],mids=[...new Set(rows.map(x=>x.mechanic_id).filter(Boolean))],cids=[...new Set(rows.map(x=>x.customer_id).filter(Boolean))];
  await Promise.all([
   ids.length?db.from('vehicles').select('id,brand,model').in('id',ids).then(z=>{if(!z.error)for(const v of z.data||[])vehicles.set(v.id,[v.brand,v.model].filter(Boolean).join(' '))}):Promise.resolve(),
-  mids.length?db.from('staff').select('id,full_name').in('id',mids).then(z=>{if(!z.error)for(const m of z.data||[])mechanics.set(m.id,m.full_name)}):Promise.resolve()
+  mids.length?db.from('staff').select('id,full_name').in('id',mids).then(z=>{if(!z.error)for(const m of z.data||[])mechanics.set(m.id,m.full_name)}):Promise.resolve(),
+  cids.length?db.from('customers').select('id,full_name,phone').in('id',cids).then(z=>{if(!z.error)for(const c of z.data||[])customers.set(c.id,c)}):Promise.resolve()
  ]);
  if(request!==mtOverviewRequest)return;
  root.replaceChildren();
  if(!rows.length){root.append(elt('p','Заказов в этой категории нет','muted'));return}
  const table=elt('div','','mt-active-orders');const head=elt('div','','mt-active-row mt-active-head');
- for(const label of ['Заказ','Техника','Механик','Статус',''])head.append(elt('span',label));table.append(head);
+ for(const label of ['Техника','Механик','Клиент / телефон','Номер заказа',''])head.append(elt('span',label));table.append(head);
  for(const x of rows.slice(0,50)){
   const row=elt('div','','mt-active-row');
   row.setAttribute('role','link');row.setAttribute('tabindex','0');row.setAttribute('aria-label','Открыть заказ '+(x.order_number||''));row.style.cursor='pointer';
   row.onclick=event=>{if(event.target.closest('button,a,input,select'))return;openRecord('orders',x.id)};
   row.onkeydown=event=>{if((event.key==='Enter'||event.key===' ')&&event.target===row){event.preventDefault();openRecord('orders',x.id)}};
-  row.append(elt('b',x.order_number||'Заказ'),elt('span',vehicles.get(x.vehicle_id)||'Техника не указана'),elt('span',mechanics.get(x.mechanic_id)||'Не назначен'),elt('span',x.status||'Без статуса','mt-active-status'));
+  const client=customers.get(x.customer_id);const clientInfo=elt('span','');clientInfo.append(elt('strong',client?.full_name||'Клиент не указан'));clientInfo.append(elt('small',client?.phone||'Телефон не указан'));clientInfo.style.cssText='display:flex;flex-direction:column;gap:3px';
+  row.append(elt('b',vehicles.get(x.vehicle_id)||'Техника не указана'),elt('span',mechanics.get(x.mechanic_id)||'Не назначен'),clientInfo,elt('span',x.order_number||'Номер не указан'));
   const open=elt('button','Открыть');open.type='button';open.className='secondary';open.onclick=()=>openRecord('orders',x.id);row.append(open);table.append(row);
  }
  root.append(table);
