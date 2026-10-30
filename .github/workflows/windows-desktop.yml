@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'feature/windows-desktop-installer'
+      - main
   pull_request:
     paths:
       - 'desktop/**'
@@ -35,7 +36,7 @@ jobs:
           path: desktop/dist/*.exe
           if-no-files-found: error
       - name: Publish Windows update on GitHub Releases
-        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/windows-desktop-installer'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
