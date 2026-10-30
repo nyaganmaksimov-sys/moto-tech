@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MOTO TECH — подключение</title>
+<style>:root{font-family:system-ui,sans-serif;color-scheme:dark;background:#0c1017;color:#f6f8fa}*{box-sizing:border-box}body{min-height:100vh;display:grid;place-items:center;margin:0;padding:24px}.panel{width:min(510px,100%);background:#1b222d;border:1px solid #394150;border-radius:18px;padding:32px}h1{font-size:26px;letter-spacing:.01em;margin:0}h1 span{color:#e03849}.hint{color:#b1bbcb;font-size:14px;line-height:1.55;margin:15px 0 25px}label{font-size:13px;color:#c9d2de}input{width:100%;margin:8px 0 12px;padding:14px;background:#101722;border:1px solid #586171;border-radius:10px;color:white;font-size:15px}button{width:100%;background:#c72e40;border:0;color:white;font-weight:700;padding:13px;border-radius:10px;cursor:pointer}.error{min-height:24px;color:#ff9da5;font-size:13px;margin-top:10px}</style></head>
+<body><main class="panel"><h1><span>MOTO</span> TECH</h1><p class="hint">Первоначальная настройка приложения. Введите адрес действующей системы MOTO TECH. Все заказы, сотрудники и уведомления останутся в существующей базе. Для работы требуется интернет.</p>
+<form id="form"><label for="url">Адрес системы (HTTPS)</label><input id="url" type="url" placeholder="https://your-moto-tech-domain.ru/" required autocomplete="url"><button>Подключить систему</button><div id="error" class="error" role="alert"></div></form></main>
+<script>
+const params=new URLSearchParams(location.search);
+document.querySelector('#error').textContent=params.get('error')||'';
+document.querySelector('#form').addEventListener('submit',async e=>{
+ e.preventDefault();
+ const result=await window.motoDesktopSetup.saveUrl(document.querySelector('#url').value.trim());
+ if(result?.error)document.querySelector('#error').textContent=result.error;
+});
+</script></body></html>
