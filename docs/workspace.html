@@ -1676,7 +1676,7 @@ async function loadAuditLog(){
  box.replaceChildren();if(!r.data.length){box.append(elt('p','Событий по выбранным фильтрам нет','muted'));return}
  const verbs={insert:'Создание',update:'Изменение',delete:'Удаление',closed_order_correction_requested:'Запрошена корректировка закрытой сметы',replace_photo:'Заменена фотография',edit_photo_description:'Изменено описание фотографии',remove_photo:'Удалена фотография'};
  const tables={orders:'Заказ-наряд',storage_records:'Хранение',part_requests:'Запчасти',order_cost_items:'Смета',service_inventory:'Склад',customers:'Клиенты',vehicles:'Техника',vehicle_intake_photos:'Фотографии',crm_tasks:'CRM',price_items:'Прайс',service_finance_entries:'Финансы'};
- const labels={name:'Название',quantity:'Количество',unit_price:'Цена',status:'Статус',complaint:'Жалоба',mechanic_id:'Механик',monthly_rate:'Тариф',start_date:'Дата начала',end_date:'Дата окончания',return_date:'Дата возврата',terms:'Условия'};
+ const labels={name:'Название',quantity:'Количество',unit_price:'Цена',status:'Статус',complaint:'Жалоба',mechanic_id:'Механик',monthly_rate:'Тариф',amount:'Сумма заказа',purchase_price:'Закупочная цена',location:'Местоположение',start_date:'Дата начала',end_date:'Дата окончания',return_date:'Дата возврата',terms:'Условия'};
  const format=a=>a===null||a===undefined||a===''?'—':typeof a==='object'?JSON.stringify(a):String(a);
 
  for(const x of r.data){const item=elt('div','','item');const when=new Date(x.created_at).toLocaleString('ru-RU');const who=x.actor_name?(x.actor_name+(x.actor_login?' ('+x.actor_login+')':'')):(x.actor_login||'Система — техническая операция, без входа сотрудника');item.append(elt('b',when+' · '+who),elt('p',(verbs[x.action]||x.action)+' · '+(tables[x.entity]||x.entity)+' · '+(x.details?.label||x.record_id||'—'),'muted'));if(x.details?.changed_fields?.length)item.append(elt('small','Изменённые поля: '+x.details.changed_fields.map(f=>labels[f]||f).join(', ')));
@@ -1691,7 +1691,7 @@ async function loadAuditLog(){
  if(x.details?.order_number)item.append(elt('small','Заказ: '+x.details.order_number));
  if(x.details?.changes && typeof x.details.changes==='object'){
   for(const [field,change] of Object.entries(x.details.changes)){
-   if(!change||typeof change!=='object')continue;
+   if(!change||typeof change!=='object'||['updated_at','created_at'].includes(field))continue;
    const previous=change.old??change.before;
    const current=change.new??change.after;
    if(JSON.stringify(previous)===JSON.stringify(current))continue;
