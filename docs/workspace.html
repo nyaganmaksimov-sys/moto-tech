@@ -992,7 +992,7 @@ async function showIntakeEditor(table,r,panel){
  if(table==='orders')rows.push(['complaint','Жалоба / замечания',r.complaint]);
  else rows.push(['start_date','Начало хранения',r.start_date]);
  for(const [key,label,value] of rows){const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.value=value??'';input.maxLength=key==='complaint'?2000:150;if(['year','mileage'].includes(key)){input.type='number';input.min='0'}if(key==='start_date')input.type='date';if(['customer_name','phone','brand','model'].includes(key))input.required=true;if(key==='start_date'&&staff.role==='mechanic')input.disabled=true;wrap.append(input);form.append(wrap);inputs[key]=input}
- const buttons=document.createElement('div');buttons.className='row';const save=elt('button','Сохранить изменения');save.type='submit';save.style.cssText='grid-column:1/-1;justify-self:start;min-height:44px';const cancel=elt('button','Отмена');cancel.type='button';cancel.className='secondary';cancel.onclick=()=>form.remove();buttons.append(save,cancel);form.append(buttons);
+ const buttons=document.createElement('div');buttons.className='row';const save=elt('button','Сохранить изменения');save.type='submit';save.style.cssText='min-height:44px;width:100%;max-width:280px';const cancel=elt('button','Отмена');cancel.type='button';cancel.className='secondary';cancel.onclick=()=>form.remove();buttons.append(save,cancel);form.append(buttons);
  form.onsubmit=async event=>{event.preventDefault();if(save.disabled)return;const values={};for(const [key,input] of Object.entries(inputs))if(!input.disabled)values[key]=input.value.trim();if(!await confirmActionPin())return;save.disabled=true;try{const result=await db.rpc('edit_intake_details',{p_kind:table==='orders'?'repair':'storage',p_record:r.id,p_fields:values});if(result.error)throw result.error;msg('Данные приёмки обновлены');await openRecord(table,r.id);await loadTab(table)}catch(err){msg('Ошибка редактирования: '+err.message);save.disabled=false}};
  panel.append(form);form.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -1034,7 +1034,7 @@ async function mtAdminRecordEditor(table,id,record,panel){
   }
  }
  const save=elt('button','Сохранить изменения');save.type='submit';
- const helper=elt('small','Для изменения требуется личный PIN. Изменения выполняются в общей базе.');helper.style.gridColumn='1/-1';form.append(helper,save);
+ const helper=elt('small','Для изменения требуется личный PIN. Изменения выполняются в общей базе.');helper.style.gridColumn='1/-1';form.append(helper);const sticky=elt('div','','mt-editor-sticky-save');sticky.style.cssText='position:sticky;bottom:0;z-index:20;grid-column:1/-1;display:flex;justify-content:flex-end;align-items:center;padding:12px 14px;background:#1e2632;border-top:1px solid #536072;box-shadow:0 -8px 18px #0007;border-radius:0 0 10px 10px';sticky.append(save);form.append(sticky);
  form.onsubmit=async event=>{
   event.preventDefault();if(save.disabled)return;
   const changes={};
