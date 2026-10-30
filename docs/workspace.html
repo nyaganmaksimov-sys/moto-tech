@@ -980,6 +980,44 @@ async function showIntakeEditor(table,r,panel){
 function mtBikePosition(bike,ratio){if(!bike)return;const rider=bike.querySelector('.mt-bike-rider');if(!rider)return;const distance=Math.max(0,bike.clientWidth-rider.offsetWidth);rider.style.setProperty('--mt-offset',Math.round(distance*ratio)+'px')}
 function mtBikeStart(bike){if(!bike)return;mtBikePosition(bike,0);requestAnimationFrame(()=>requestAnimationFrame(()=>{if(bike.isConnected)mtBikePosition(bike,.78)}))}
 async function mtBikeFinish(root){const bike=root?.classList?.contains('mt-bike-loader')?root:root?.querySelector('.mt-bike-loader');if(!bike)return;bike.classList.add('mt-bike-complete');mtBikePosition(bike,1);await new Promise(resolve=>setTimeout(resolve,350))}
+async function mtAdminRecordEditor(table,id,record,panel){
+ if(!staff || !['owner_manager','manager','administrator'].includes(staff.role))return;
+ const wrap=document.createElement('details');wrap.className='card';wrap.style.margin='12px 0';
+ const summary=document.createElement('summary');summary.textContent=table==='orders'?'Редактировать заказ-наряд':'Редактировать договор хранения';summary.style.cursor='pointer';wrap.append(summary);
+ const form=document.createElement('form');form.style.cssText='display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:12px';
+ const fields=table==='orders'?
+  [['complaint','Жалоба / описание','textarea'],['mechanic_id','Ответственный механик','mechanic']]:
+  [['status','Статус','text'],['start_date','Дата начала','date'],['end_date','Дата окончания','date'],['return_date','Дата возврата','date'],['monthly_rate','Стоимость хранения в месяц, ₽','number'],['terms','Условия хранения','textarea']];
+ const inputs={};
+ for(const [key,label,type] of fields){
+  const field=document.createElement('label');field.style.cssText='display:grid;gap:5px;min-width:0';field.textContent=label;
+  let input;
+  if(type==='textarea'){input=document.createElement('textarea');input.rows=2;input.maxLength=3000}
+  else if(type==='mechanic'){input=document.createElement('select');input.append(new Option('Не назначен',''));const employees=await db.from('staff').select('id,full_name,role').eq('active',true);if(!employees.error)for(const person of employees.data||[])if(person.role==='mechanic')input.add(new Option(person.full_name,person.id))}
+  else{input=document.createElement('input');input.type=type;if(type==='number'){input.min='0';input.step='0.01'}}
+  input.value=record[key]??'';inputs[key]=input;field.append(input);form.append(field);
+ }
+ const save=elt('button','Сохранить изменения');save.type='submit';
+ const helper=elt('small','Для изменения требуется личный PIN. Изменения выполняются в общей базе.');helper.style.gridColumn='1/-1';form.append(helper,save);
+ form.onsubmit=async event=>{
+  event.preventDefault();if(save.disabled)return;
+  const changes={};
+  for(const [key,,type] of fields){
+   const raw=inputs[key].value.trim();
+   const old=record[key]===null||record[key]===undefined?'':String(record[key]);
+   if(raw===old)continue;
+   if(type==='number' && (!Number.isFinite(Number(raw)) || Number(raw)<0))return msg('Проверьте сумму');
+   changes[key]=type==='number'?Number(raw):raw===''?null:raw;
+  }
+  if(!Object.keys(changes).length)return msg('Нет изменений');
+  if(!await confirmActionPin())return;
+  save.disabled=true;
+  const updated=await db.from(table).update(changes).eq('id',id).select('id').maybeSingle();
+  if(updated.error||!updated.data){msg('Не удалось сохранить: '+(updated.error?.message||'Нет доступа'));save.disabled=false;return}
+  msg('Изменения сохранены');await openRecord(table,id);await loadTab(table);
+ };
+ wrap.append(form);panel.append(wrap);
+}
 async function openRecord(table,id){
 if(!['orders','storage_records'].includes(table)||!validRecord(id))return;
 const panel=showDetailPanel();const overlay=$('vehicleOverlay');const loading=elt('div','','mt-order-loading');loading.setAttribute('role','status');loading.setAttribute('aria-live','polite');const bike=elt('div','','mt-bike-loader');bike.setAttribute('aria-hidden','true');bike.append(elt('span','🏍️','mt-bike-rider'),elt('span','','mt-bike-road'),elt('span','СТАРТ','mt-bike-start'),elt('span','ФИНИШ','mt-bike-finish'));loading.append(bike,elt('strong',table==='orders'?'Загружаем заказ-наряд…':'Загружаем договор хранения…'));overlay.append(loading);mtBikeStart(bike);panel.style.visibility='hidden';panel.replaceChildren();
@@ -987,6 +1025,7 @@ try{
  const result=await db.from(staff.role==='mechanic'?(table==='orders'?'mechanic_orders':'mechanic_storage'):table).select('*').eq('id',id).single();
  if(result.error)throw result.error;const r=result.data;
  panel.replaceChildren(elt('h2',(table==='orders'?'Заказ-наряд ':'Договор хранения ')+(r.order_number||r.contract_number||'')));
+ await mtAdminRecordEditor(table,id,r,panel);
  if(table==='orders'){
    const header=elt('div','','compact-order-head');
    const facts=elt('div','','facts');const add=(label,value)=>{const x=elt('span','');const b=elt('b',label+': ');x.append(b,document.createTextNode(String(value??'—')));facts.append(x)};
