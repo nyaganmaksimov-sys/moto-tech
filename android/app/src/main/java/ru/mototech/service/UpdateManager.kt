@@ -51,10 +51,10 @@ class UpdateManager(private val activity:Activity) {
     val download=link
     activity.runOnUiThread {
      if(compare(version,local)>0&&download!=null){
-      AlertDialog.Builder(activity).setTitle("Обновление MOTO TECH")
-       .setMessage("Доступна версия $version (установлена $local). Скачать и установить поверх текущей? Перед установкой сохраните открытые изменения.")
-       .setPositiveButton("Скачать"){_,_->startDownload(download)}
-       .setNegativeButton("Позже",null).show()
+      if(pendingDownload==null){
+       Toast.makeText(activity,"MOTO TECH $version: загрузка обновления началась",Toast.LENGTH_LONG).show()
+       startDownload(download)
+      }else if(manual) Toast.makeText(activity,"Обновление уже загружается",Toast.LENGTH_SHORT).show()
      } else if(manual) Toast.makeText(activity,"Новых обновлений нет",Toast.LENGTH_SHORT).show()
     }
    }catch(e:Exception){
@@ -89,7 +89,7 @@ class UpdateManager(private val activity:Activity) {
     }
    }
    val filter=IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-   if(Build.VERSION.SDK_INT>=33) activity.registerReceiver(receiver,filter,Context.RECEIVER_NOT_EXPORTED)
+   if(Build.VERSION.SDK_INT>=33) activity.registerReceiver(receiver,filter,Context.RECEIVER_EXPORTED)
    else @Suppress("DEPRECATION") activity.registerReceiver(receiver,filter)
   }
  }
