@@ -1583,6 +1583,9 @@ async function renderMtOverviewSelection(){
  for(const label of ['Заказ','Техника','Механик','Статус',''])head.append(elt('span',label));table.append(head);
  for(const x of rows.slice(0,50)){
   const row=elt('div','','mt-active-row');
+  row.setAttribute('role','link');row.setAttribute('tabindex','0');row.setAttribute('aria-label','Открыть заказ '+(x.order_number||''));row.style.cursor='pointer';
+  row.onclick=event=>{if(event.target.closest('button,a,input,select'))return;openRecord('orders',x.id)};
+  row.onkeydown=event=>{if((event.key==='Enter'||event.key===' ')&&event.target===row){event.preventDefault();openRecord('orders',x.id)}};
   row.append(elt('b',x.order_number||'Заказ'),elt('span',vehicles.get(x.vehicle_id)||'Техника не указана'),elt('span',mechanics.get(x.mechanic_id)||'Не назначен'),elt('span',x.status||'Без статуса','mt-active-status'));
   const open=elt('button','Открыть');open.type='button';open.className='secondary';open.onclick=()=>openRecord('orders',x.id);row.append(open);table.append(row);
  }
