@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android") }
 android {
  namespace = "ru.mototech.service"
  compileSdk = 35
- defaultConfig { applicationId = "ru.mototech.service"; minSdk = 26; targetSdk = 35; versionCode = 4; versionName = "0.3.0" }
+ defaultConfig { applicationId = "ru.mototech.service"; minSdk = 26; targetSdk = 35; versionCode = 5; versionName = "0.4.0" }
  signingConfigs {
   create("production") {
    storeFile = file(System.getenv("MOTO_KEYSTORE_PATH") ?: "release-signing-unconfigured.jks")
