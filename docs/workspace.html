@@ -1527,7 +1527,7 @@ async function mtOpenExistingOrderInIntake(order){
   db.from('order_cost_items').select('id,item_type,name,quantity,unit_price').eq('order_id',order.id)
  ]);
  if(customer.error||vehicle.error||lines.error)return msg('Ошибка загрузки заказа: '+(customer.error||vehicle.error||lines.error).message);
- mtEditingIntake={order,customer:customer.data,vehicle:vehicle.data};
+ mtEditingIntake={order,customer:customer.data,vehicle:vehicle.data,originalWorks:(lines.data||[]).filter(x=>x.item_type==='work')};
  selectView('intake');
  const values={intakeKind:'repair',inMechanic:order.mechanic_id||'',inCustomer:customer.data?.full_name||'',inPhone:customer.data?.phone||'',inBrand:vehicle.data?.brand||'',inModel:vehicle.data?.model||'',inVin:vehicle.data?.vin||'',inPlate:vehicle.data?.plate||'',inMileage:vehicle.data?.mileage??'',inNotes:order.complaint||''};
  for(const [key,value] of Object.entries(values)){if($(key)){$(key).value=value;$(key).dispatchEvent(new Event('change',{bubbles:true}))}}
@@ -1562,8 +1562,22 @@ async function mtSaveExistingIntakeOrder(){
   const assigned=await db.rpc('assign_repair_mechanic',{p_order_number:o.order_number,p_mechanic:$('inMechanic').value});
   if(assigned.error)throw new Error('Назначение механика: '+assigned.error.message);
  }
- // Existing work lines are edited through the order estimate, not recreated via intake RPC.
- msg('Данные заказа обновлены. Работы и запчасти редактируются в смете заказа.');
+ const original=state.originalWorks||[];
+ const isClosed=['Выдан','Завершён','Завершено','Закрыт'].includes(o.status);
+ const modified=intakeServiceRows.some(w=>{const before=original.find(x=>x.id===w.id);return !before||before.name!==w.name||Number(before.quantity)!==Number(w.quantity)||Number(before.unit_price)!==Number(w.unit_price)})||original.some(w=>!intakeServiceRows.some(x=>x.id===w.id));
+ if(modified&&isClosed)throw new Error('Закрытый заказ: финансовые изменения необходимо согласовывать отдельно в карточке заказа');
+ for(const item of original){
+  const current=intakeServiceRows.find(w=>w.id===item.id);
+  if(!current||current.name!==item.name||Number(current.quantity)!==Number(item.quantity)||Number(current.unit_price)!==Number(item.unit_price)){
+   const result=await db.rpc('manage_order_line',{p_line:item.id,p_name:current?.name||item.name,p_quantity:current?Number(current.quantity):Number(item.quantity),p_unit_price:current?Number(current.unit_price):Number(item.unit_price),p_delete:!current});
+   if(result.error)throw new Error('Работа '+item.name+': '+result.error.message);
+  }
+ }
+ for(const item of intakeServiceRows.filter(x=>!x.id)){
+  const result=await db.rpc('add_intake_repair_service',{p_order_number:o.order_number,p_price_item:item.price_item||null,p_custom_name:item.name,p_quantity:Number(item.quantity),p_unit_price:Number(item.unit_price)});
+  if(result.error)throw new Error('Новая работа '+item.name+': '+result.error.message);
+ }
+ msg('Изменения заказа и работ сохранены.');
  mtFinishIntakeEdit(true);
 }
 let intakeServiceRows=[];
