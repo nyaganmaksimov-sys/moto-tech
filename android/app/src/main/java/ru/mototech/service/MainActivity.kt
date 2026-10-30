@@ -34,15 +34,16 @@ class MainActivity : Activity() {
   info=TextView(this).apply{setTextColor(0xfff5f5f5.toInt());text="MOTO TECH · подключение...";setPadding(12,8,12,8)}
   web=WebView(this)
   val updateButton=Button(this).apply{text="Проверить обновления";setOnClickListener{updates.check(true)}}
+  val retryButton=Button(this).apply{text="Повторить подключение";visibility=View.GONE;setOnClickListener{visibility=View.GONE;info.visibility=View.VISIBLE;info.text="Подключаемся к MOTO TECH...";web.stopLoading();web.settings.cacheMode=WebSettings.LOAD_NO_CACHE;web.loadUrl(home)}}
   layout.addView(updateButton,LinearLayout.LayoutParams(-1,48))
-  layout.addView(info);layout.addView(bar,LinearLayout.LayoutParams(-1,4))
+  layout.addView(info);layout.addView(retryButton,LinearLayout.LayoutParams(-1,48));layout.addView(bar,LinearLayout.LayoutParams(-1,4))
   layout.addView(web,LinearLayout.LayoutParams(-1,0,1f))
   setContentView(layout)
   CookieManager.getInstance().setAcceptCookie(true)
   web.addJavascriptInterface(UpdateBridge(),"MotoAndroid")
   web.settings.javaScriptEnabled=true
   web.settings.domStorageEnabled=true
-  web.settings.cacheMode=WebSettings.LOAD_DEFAULT
+  web.settings.cacheMode=WebSettings.LOAD_NO_CACHE
   web.settings.allowFileAccess=false
   web.settings.allowContentAccess=true
   web.webViewClient=object:WebViewClient(){
@@ -52,9 +53,9 @@ class MainActivity : Activity() {
     if(uri.scheme=="https")startActivity(Intent(Intent.ACTION_VIEW,uri))
     return true
    }
-   override fun onPageFinished(view:WebView?,url:String?){info.visibility=View.GONE}
+   override fun onPageFinished(view:WebView?,url:String?){info.visibility=View.GONE;retryButton.visibility=View.GONE}
    override fun onReceivedError(view:WebView?,request:WebResourceRequest?,error:WebResourceError?){
-    if(request?.isForMainFrame==true){info.visibility=View.VISIBLE;info.text="Нет подключения к системе. Проверьте интернет."}
+    if(request?.isForMainFrame==true){info.visibility=View.VISIBLE;info.text="Не удалось открыть MOTO TECH: "+(error?.description?.toString()?:"ошибка сети");retryButton.visibility=View.VISIBLE}
    }
   }
   web.webChromeClient=object:WebChromeClient(){
