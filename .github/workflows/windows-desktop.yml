@@ -1,3 +1,4 @@
+# Verify MOTO TECH 0.4.0 installers from source
 name: Windows desktop test installer
 on:
   workflow_dispatch:
