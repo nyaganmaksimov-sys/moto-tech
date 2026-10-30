@@ -1,6 +1,9 @@
 name: Android test APK
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'feature/android-app'
   pull_request:
     paths:
       - 'android/**'
