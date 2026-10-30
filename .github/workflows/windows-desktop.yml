@@ -9,7 +9,7 @@ on:
       - 'desktop/**'
       - '.github/workflows/windows-desktop.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: windows-latest
@@ -34,3 +34,23 @@ jobs:
           name: MOTO-TECH-Windows-test-installer
           path: desktop/dist/*.exe
           if-no-files-found: error
+      - name: Publish Windows update on GitHub Releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feature/windows-desktop-installer'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          shopt -s nullglob
+          ASSETS=(dist/*.exe dist/latest.yml dist/*.blockmap)
+          if (( ${#ASSETS[@]} < 2 )); then
+            echo 'Windows installer or latest.yml missing'
+            exit 1
+          fi
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "MOTO TECH $VERSION" --notes "Desktop and Android application updates. Windows installer may show a SmartScreen warning because it is not code-signed." --latest
+          fi
+          gh release upload "$TAG" "${ASSETS[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+
