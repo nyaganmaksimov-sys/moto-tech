@@ -6,7 +6,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/feature/android-app'
+    if: github.ref == 'refs/heads/feature/android-app' || github.ref == 'refs/heads/main'
     defaults:
       run:
         working-directory: android
