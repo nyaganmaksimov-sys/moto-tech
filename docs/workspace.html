@@ -706,7 +706,7 @@ function renderOrderIntakeActions(table){
  if(!bar){bar=document.createElement('div');bar.id='orderIntakeActions';bar.className='row';bar.style.cssText='gap:10px;flex-wrap:wrap;margin:12px 0 16px;padding:12px;background:#1d2530;border:1px solid #3a4656;border-radius:12px';list.parentNode.insertBefore(bar,list)}
  bar.replaceChildren();
  const title=elt('strong','Добавить мотоцикл');title.style.marginRight='auto';bar.append(title);
- for(const [kind,label] of [['repair','+ На ремонт'],['storage','+ На хранение'],['both','+ Ремонт и хранение']]){
+ for(const [kind,label] of [['repair','+ На ремонт'],['storage','+ На хранение']]){
   const btn=elt('button',label);btn.type='button';if(kind==='storage')btn.className='secondary';
   btn.onclick=()=>startQuickIntake(kind);bar.append(btn)
  }
