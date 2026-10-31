@@ -2369,4 +2369,15 @@ function installMtAdminSidebar(){
  sidebar.addEventListener('click',e=>{const btn=e.target.closest('button[data-view]');if(btn&&btn.closest('details'))btn.closest('details').open=true});
 }
 setupCompactIntake();setInterval(()=>{if(staff&&['owner_manager','manager','administrator'].includes(staff.role)&&!$('overviewSection')?.classList.contains('cloud-hidden')&&document.visibilityState==='visible'){void loadStaffNotifications();void mtLoadWorkRequests()}},20000);mtBikeStart($('mtPageBoot')?.querySelector('.mt-bike-loader'));try{await refresh();if(staff){installMtAdmin();installMtAdminSidebar();let restoredView='overview';try{const v=sessionStorage.getItem('mt.currentView');if(['overview','profile','intake','orders','storage_records','customers','vehicles','price_items','part_requests','staff','crm_tasks','service_inventory','service_appointments','service_finance_entries','staff_audit_log'].includes(v))restoredView=v;if(staff.role==='mechanic'&&!['overview','profile','intake','orders','storage_records','part_requests','crm_tasks'].includes(restoredView))restoredView='overview'}catch(_){}selectView(restoredView);await ensureIntakeReferenceData();mtRestoreIntake();$('sidebar').style.display='';await mtBikeFinish($('mtPageBoot'));$('mtPageBoot').hidden=true}else{location.replace('./login.html?v=no-pin-gate-20261022')}}catch(e){await mtBikeFinish($('mtPageBoot'));$('mtPageBoot').hidden=true;msg('Ошибка авторизации: '+e.message);$('login').style.display='block';$('dashboard').style.display='none';$('sidebar').style.display='none';$('loginLink').href='./login.html?v=no-pin-gate-20261022'}
-</script></div></body></html>
+</script></div><script>
+/* Native picker allows camera or photo library when supported by mobile OS. */
+(function(){
+ function setup(){
+  for(const id of ['photo_front','photo_rear','photo_left','photo_right','damagePhotos','extraPhotos','ptsFile']){
+   const input=document.getElementById(id);if(!input)continue;
+   input.removeAttribute('capture');input.setAttribute('accept','image/*');
+  }
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
+})();
+</script></body></html>
