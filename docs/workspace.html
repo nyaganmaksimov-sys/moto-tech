@@ -1359,7 +1359,27 @@ if(table==='orders'){
   const button=elt('button',label);button.type='button';button.className='secondary';button.onclick=()=>printRepairDocument(r,kind);docs.append(button)
  }if(['owner_manager','manager','administrator'].includes(staff.role)){const savePdf=elt('button','Сформировать и сохранить PDF');savePdf.type='button';savePdf.onclick=async()=>{const kind=prompt('Тип документа: intake — приёмка, order — заказ-наряд, completed — акт работ, handover — выдача','order');if(!kind)return;savePdf.disabled=true;try{await archiveRepairPdf({db,staff,order:r,kind:kind.trim()});msg('PDF создан и сохранён в облачный архив');await openRecord('orders',id)}catch(error){msg('Ошибка PDF: '+error.message)}finally{savePdf.disabled=false}};docs.append(savePdf)}panel.append(docs);
 }
-if(table==='storage_records'){const printButtons=elt('div','','row');const act=elt('button','Печать акта хранения');act.type='button';act.onclick=()=>printStoragePackage(r,false);const photos=elt('button','Печать комплекта документов');photos.type='button';photos.onclick=()=>printStoragePackage(r,true);printButtons.append(act,photos);panel.append(printButtons)}
+if(table==='storage_records'){
+ const storageEdit=elt('div','','card');storageEdit.append(elt('h3','Сроки хранения'));
+ const dates=document.createElement('div');dates.className='row';
+ const dateFields=[['start_date','Начало хранения'],['return_date','Плановая дата выдачи']];
+ const dateInputs={};
+ for(const [column,label] of dateFields){const wrap=document.createElement('label');wrap.textContent=label;const input=document.createElement('input');input.type='date';input.value=String(r[column]||'').slice(0,10);input.disabled=!['owner_manager','manager','administrator'].includes(staff?.role);wrap.append(input);dates.append(wrap);dateInputs[column]=input}
+ storageEdit.append(dates);
+ if(['owner_manager','manager','administrator'].includes(staff?.role)){
+ const saveDates=elt('button','Сохранить даты хранения');saveDates.type='button';
+ saveDates.onclick=async()=>{
+  const start=dateInputs.start_date.value,end=dateInputs.return_date.value;
+  if(!start||!end||end<start){msg('Проверьте даты начала и окончания хранения');return}
+  if(!await confirmActionPin())return;
+  saveDates.disabled=true;
+  try{const result=await db.from('storage_records').update({start_date:start,return_date:end}).eq('id',r.id).select('id').maybeSingle();if(result.error||!result.data)throw new Error(result.error?.message||'Нет прав на изменение сроков');msg('Сроки хранения сохранены');await openRecord('storage_records',r.id)}
+  catch(error){msg('Не удалось сохранить сроки хранения: '+error.message);saveDates.disabled=false}
+ };
+ storageEdit.append(saveDates)
+ }
+ panel.append(storageEdit);
+ const printButtons=elt('div','','row');const act=elt('button','Печать акта хранения');act.type='button';act.onclick=()=>printStoragePackage(r,false);const photos=elt('button','Печать комплекта документов');photos.type='button';photos.onclick=()=>printStoragePackage(r,true);printButtons.append(act,photos);panel.append(printButtons)}
 if(table==='orders'){panel.append(elt('h3','Архив PDF'));const result=await db.from('repair_documents').select('filename,file_path,created_at').eq('order_id',id).order('created_at',{ascending:false});if(result.error)panel.append(elt('p',result.error.message));else for(const doc of result.data){const b=elt('button',doc.filename);b.onclick=async()=>{const signed=await db.storage.from('moto-documents-private').createSignedUrl(doc.file_path,60);if(signed.error)msg(signed.error.message);else window.open(signed.data.signedUrl,'_blank','noopener,noreferrer')};panel.append(b)}if(['owner_manager','manager','administrator'].includes(staff.role)){const input=document.createElement('input');input.type='file';input.accept='application/pdf';const choice=document.createElement('select');for(const key of ['intake','order','completed','handover']){const opt=document.createElement('option');opt.value=key;opt.textContent=key;choice.append(opt)}const b=elt('button','Загрузить PDF');b.onclick=async()=>{const file=input.files[0];if(!file||file.type!=='application/pdf'||file.size>10485760)return msg('Требуется PDF до 10 МБ');b.disabled=true;const user=(await db.auth.getUser()).data.user;const path=user.id+'/'+crypto.randomUUID()+'.pdf';const uploaded=await db.storage.from('moto-documents-private').upload(path,file,{contentType:'application/pdf'});if(uploaded.error){msg(uploaded.error.message);b.disabled=false;return}const saved=await db.from('repair_documents').insert({order_id:id,vehicle_id:r.vehicle_id,document_type:choice.value,file_path:path,filename:file.name,uploaded_by:staff.id});if(saved.error){msg(saved.error.message);b.disabled=false;return}await openRecord('orders',id)};panel.append(choice,input,b)}}
 if(table==='orders'){const log=await db.from('repair_work_log').select('kind,description,created_at').eq('order_id',id).order('created_at',{ascending:false}).limit(100);panel.append(elt('h3','Журнал ремонта'));if(log.error)panel.append(elt('p',log.error.message));else for(const e of log.data)panel.append(elt('div',e.kind+': '+e.description,'item'));const handover=await db.from('repair_handovers').select('*').eq('order_id',id).maybeSingle();
 if(handover.error)panel.append(elt('p','Ошибка сведений о выдаче: '+handover.error.message,'muted'));
@@ -1525,7 +1545,30 @@ async function showVehicleQR(vehicleId,purpose,refNumber,recordType,recordId){
  if(!window.QRCode){await new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';js.onload=resolve;js.onerror=reject;document.head.append(js)})}
  new window.QRCode(canvas,{text:url.toString(),width:220,height:220,colorDark:'#000000',colorLight:'#ffffff',correctLevel:window.QRCode.CorrectLevel.M});
  const description=elt('p','MOTO TECH · '+purpose+' · '+refNumber,'muted');panel.append(description);
- const print=elt('button','Распечатать QR');print.onclick=()=>{const img=canvas.querySelector('img');const imgSrc=img?.src||canvas.querySelector('canvas')?.toDataURL();if(!imgSrc)return;const win=window.open('','_blank');if(!win){msg('Разрешите открытие окна печати');return}win.document.write('<!doctype html><html><head><title>MOTO TECH QR</title><style>body{font:14px Arial;text-align:center;margin:20px}img{width:220px;height:220px}h2{margin-bottom:10px}</style></head><body><h2>MOTO TECH</h2><img src="'+imgSrc+'"><p>'+escapeQR(purpose)+' · '+escapeQR(refNumber)+'</p></body></html>');win.document.close();win.focus();win.addEventListener('load',()=>win.print())};panel.append(print);
+ const print=elt('button','Распечатать QR');print.onclick=()=>{const img=canvas.querySelector('img');const imgSrc=img?.src||canvas.querySelector('canvas')?.toDataURL();if(!imgSrc)return;const win=window.open('','_blank');if(!win){msg('Разрешите открытие окна печати');return}win.document.write('<!doctype html><html><head><title>MOTO TECH QR</title><style>body{font:14px Arial;text-align:center;margin:20px}img{width:220px;height:220px}h2{margin-bottom:10px}</style></head><body><h2>MOTO TECH</h2><img src="'+imgSrc+'"><p>'+escapeQR(purpose)+' · '+escapeQR(refNumber)+'</p><script>
+/* Mobile photo input: keep gallery picker, add separate rear-camera action. */
+(function(){
+ function setup(){
+  const ids=['photo_front','photo_rear','photo_left','photo_right','damagePhotos','extraPhotos','ptsFile'];
+  for(const id of ids){
+   const gallery=document.getElementById(id);if(!gallery||gallery.dataset.cameraChoice)return;
+   gallery.dataset.cameraChoice='1';
+   const camera=document.createElement('input');camera.type='file';camera.accept='image/*';camera.capture='environment';camera.hidden=true;
+   if(gallery.multiple)camera.multiple=false;
+   const take=document.createElement('button');take.type='button';take.className='secondary';take.textContent='📷 Сфотографировать';take.style.cssText='margin:4px 6px 8px 0;min-height:42px';
+   take.addEventListener('click',()=>camera.click());
+   camera.addEventListener('change',()=>{
+    if(!camera.files?.length)return;
+    try{const transfer=new DataTransfer();if(gallery.multiple)for(const old of gallery.files||[])transfer.items.add(old);for(const file of camera.files)transfer.items.add(file);gallery.files=transfer.files;gallery.dispatchEvent(new Event('change',{bubbles:true}))}
+    catch(error){console.warn('Camera file transfer unsupported',error);alert('Не удалось перенести фото в форму. Выберите снимок через поле файлов.')}
+   });
+   gallery.insertAdjacentElement('afterend',take);take.insertAdjacentElement('afterend',camera);
+   gallery.setAttribute('aria-label','Выбрать существующее фото — '+id);
+  }
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
+})();
+</script></body></html>');win.document.close();win.focus();win.addEventListener('load',()=>win.print())};panel.append(print);
  panel.append(elt('p','Код содержит только ссылку на карточку. Для просмотра требуется вход сотрудника.','muted'));
  panel.scrollIntoView({behavior:'smooth'});
  }catch(error){msg('QR не создан: '+error.message)}
@@ -2198,7 +2241,7 @@ function setupCompactIntake(){
 
 }
 
-function startQuickIntake(kind){selectView('intake');$('intakeKind').value=kind;$('intakeKind').onchange();$('intakeSection').scrollIntoView({behavior:'smooth',block:'start'})}
+function startQuickIntake(kind){if(!['repair','storage','both'].includes(kind))return;mtEditingIntake=null;selectView('intake');const mode=$('intakeKind');mode.value=kind;mode.dispatchEvent(new Event('change',{bubbles:true}));$('intakeSection').dataset.intakeMode=kind;$('intakeSection').scrollIntoView({behavior:'smooth',block:'start'})}
 $('quickRepairIntake').onclick=()=>startQuickIntake('repair');
 $('quickStorageIntake').onclick=()=>startQuickIntake('storage');
 // Cache reference lists during the session; load draft list only when opened.
