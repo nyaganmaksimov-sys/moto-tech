@@ -764,7 +764,7 @@ function installOrderListControls(orders){
  }
  toolbar.style.display='';
  const filters=toolbar.querySelector('.mt-order-filterbar');filters.replaceChildren();
- const statuses=[['Все',null],['Ожидают',['Ожидает подтверждения']],['В работе',['Принят','В работе','Диагностика','Ремонт','Ожидает запчасти']],['Готовы',['Готов','Готов к выдаче']]];
+ const statuses=[['Все',null],['Ожидают',['Ожидает подтверждения']],['В работе',['Принят','В работе','Диагностика','Ремонт','Ожидает запчасти']],['Готовы',['Готов','Готов к выдаче']],['Выданные',['Выдан']]];
  let selected='Все';
  function renderChips(){
   filters.replaceChildren();
@@ -1244,18 +1244,21 @@ try{
    if(vehicle?.mileage!==null&&vehicle?.mileage!==undefined)add('Пробег',vehicle.mileage+' км');
    const complaint=elt('p','Жалоба: '+(r.complaint||'Не указана'),'mt-order-complaint');
    header.append(facts,complaint);
-   if(!r.deleted_at&&r.status!=='Выдан'){
+   if(!r.deleted_at&&staff.role!=='mechanic'){
     const statusForm=document.createElement('form');statusForm.className='order-status-control';
     const label=elt('label','Изменить статус заказа');label.setAttribute('for','orderStatusSelect');
     const select=document.createElement('select');select.id='orderStatusSelect';
-    const statuses=['Принят','Диагностика','В работе','Ожидает запчасти','Готов'];
+    const statuses=['Принят','Диагностика','В работе','Ожидает запчасти','Готов','Готов к выдаче','Выдан'];
     if(r.status&&!statuses.includes(r.status))statuses.unshift(r.status);
     for(const value of statuses)select.add(new Option(value,value));
     select.value=r.status;
     const note=document.createElement('input');note.type='text';note.maxLength=3000;note.placeholder='Причина изменения статуса / комментарий';note.required=true;
     const save=elt('button','Сохранить статус');save.type='submit';save.disabled=true;
     select.onchange=()=>{save.disabled=select.value===r.status};
-    statusForm.onsubmit=async event=>{event.preventDefault();if(save.disabled||!note.value.trim())return;if(!await confirmActionPin())return;save.disabled=true;
+    statusForm.onsubmit=async event=>{event.preventDefault();if(save.disabled||!note.value.trim())return;
+      if(select.value==='Выдан'&&!window.confirm('Подтвердите фактическую выдачу техники клиенту. Перед выдачей проверьте оплату заказа. Действие будет записано в историю.'))return;
+      if(r.status==='Выдан'&&select.value!=='Выдан'&&!window.confirm('Вернуть выданный заказ в работу? Укажите причину в комментарии.'))return;
+      if(!await confirmActionPin())return;save.disabled=true;
       try{const result=await db.rpc('record_repair_activity',{p_order_id:id,p_kind:'note',p_description:note.value.trim(),p_new_status:select.value});
        if(result.error)throw result.error;msg('Статус заказа изменён');await openRecord('orders',id);await loadTab('orders');
       }catch(error){msg('Не удалось обновить статус: '+error.message);save.disabled=false}};
