@@ -1545,30 +1545,7 @@ async function showVehicleQR(vehicleId,purpose,refNumber,recordType,recordId){
  if(!window.QRCode){await new Promise((resolve,reject)=>{const js=document.createElement('script');js.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';js.onload=resolve;js.onerror=reject;document.head.append(js)})}
  new window.QRCode(canvas,{text:url.toString(),width:220,height:220,colorDark:'#000000',colorLight:'#ffffff',correctLevel:window.QRCode.CorrectLevel.M});
  const description=elt('p','MOTO TECH · '+purpose+' · '+refNumber,'muted');panel.append(description);
- const print=elt('button','Распечатать QR');print.onclick=()=>{const img=canvas.querySelector('img');const imgSrc=img?.src||canvas.querySelector('canvas')?.toDataURL();if(!imgSrc)return;const win=window.open('','_blank');if(!win){msg('Разрешите открытие окна печати');return}win.document.write('<!doctype html><html><head><title>MOTO TECH QR</title><style>body{font:14px Arial;text-align:center;margin:20px}img{width:220px;height:220px}h2{margin-bottom:10px}</style></head><body><h2>MOTO TECH</h2><img src="'+imgSrc+'"><p>'+escapeQR(purpose)+' · '+escapeQR(refNumber)+'</p><script>
-/* Mobile photo input: keep gallery picker, add separate rear-camera action. */
-(function(){
- function setup(){
-  const ids=['photo_front','photo_rear','photo_left','photo_right','damagePhotos','extraPhotos','ptsFile'];
-  for(const id of ids){
-   const gallery=document.getElementById(id);if(!gallery||gallery.dataset.cameraChoice)return;
-   gallery.dataset.cameraChoice='1';
-   const camera=document.createElement('input');camera.type='file';camera.accept='image/*';camera.capture='environment';camera.hidden=true;
-   if(gallery.multiple)camera.multiple=false;
-   const take=document.createElement('button');take.type='button';take.className='secondary';take.textContent='📷 Сфотографировать';take.style.cssText='margin:4px 6px 8px 0;min-height:42px';
-   take.addEventListener('click',()=>camera.click());
-   camera.addEventListener('change',()=>{
-    if(!camera.files?.length)return;
-    try{const transfer=new DataTransfer();if(gallery.multiple)for(const old of gallery.files||[])transfer.items.add(old);for(const file of camera.files)transfer.items.add(file);gallery.files=transfer.files;gallery.dispatchEvent(new Event('change',{bubbles:true}))}
-    catch(error){console.warn('Camera file transfer unsupported',error);alert('Не удалось перенести фото в форму. Выберите снимок через поле файлов.')}
-   });
-   gallery.insertAdjacentElement('afterend',take);take.insertAdjacentElement('afterend',camera);
-   gallery.setAttribute('aria-label','Выбрать существующее фото — '+id);
-  }
- }
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
-})();
-</script></body></html>');win.document.close();win.focus();win.addEventListener('load',()=>win.print())};panel.append(print);
+ const print=elt('button','Распечатать QR');print.onclick=()=>{const img=canvas.querySelector('img');const imgSrc=img?.src||canvas.querySelector('canvas')?.toDataURL();if(!imgSrc)return;const win=window.open('','_blank');if(!win){msg('Разрешите открытие окна печати');return}win.document.write('<!doctype html><html><head><title>MOTO TECH QR</title><style>body{font:14px Arial;text-align:center;margin:20px}img{width:220px;height:220px}h2{margin-bottom:10px}</style></head><body><h2>MOTO TECH</h2><img src="'+imgSrc+'"><p>'+escapeQR(purpose)+' · '+escapeQR(refNumber)+'</p></body></html>');win.document.close();win.focus();win.addEventListener('load',()=>win.print())};panel.append(print);
  panel.append(elt('p','Код содержит только ссылку на карточку. Для просмотра требуется вход сотрудника.','muted'));
  panel.scrollIntoView({behavior:'smooth'});
  }catch(error){msg('QR не создан: '+error.message)}
@@ -2392,4 +2369,27 @@ function installMtAdminSidebar(){
  sidebar.addEventListener('click',e=>{const btn=e.target.closest('button[data-view]');if(btn&&btn.closest('details'))btn.closest('details').open=true});
 }
 setupCompactIntake();setInterval(()=>{if(staff&&['owner_manager','manager','administrator'].includes(staff.role)&&!$('overviewSection')?.classList.contains('cloud-hidden')&&document.visibilityState==='visible'){void loadStaffNotifications();void mtLoadWorkRequests()}},20000);mtBikeStart($('mtPageBoot')?.querySelector('.mt-bike-loader'));try{await refresh();if(staff){installMtAdmin();installMtAdminSidebar();let restoredView='overview';try{const v=sessionStorage.getItem('mt.currentView');if(['overview','profile','intake','orders','storage_records','customers','vehicles','price_items','part_requests','staff','crm_tasks','service_inventory','service_appointments','service_finance_entries','staff_audit_log'].includes(v))restoredView=v;if(staff.role==='mechanic'&&!['overview','profile','intake','orders','storage_records','part_requests','crm_tasks'].includes(restoredView))restoredView='overview'}catch(_){}selectView(restoredView);await ensureIntakeReferenceData();mtRestoreIntake();$('sidebar').style.display='';await mtBikeFinish($('mtPageBoot'));$('mtPageBoot').hidden=true}else{location.replace('./login.html?v=no-pin-gate-20261022')}}catch(e){await mtBikeFinish($('mtPageBoot'));$('mtPageBoot').hidden=true;msg('Ошибка авторизации: '+e.message);$('login').style.display='block';$('dashboard').style.display='none';$('sidebar').style.display='none';$('loginLink').href='./login.html?v=no-pin-gate-20261022'}
-</script></div></body></html>
+</script></div><script>
+/* Mobile photo input: keep gallery picker, add separate rear-camera action. */
+(function(){
+ function setup(){
+  const ids=['photo_front','photo_rear','photo_left','photo_right','damagePhotos','extraPhotos','ptsFile'];
+  for(const id of ids){
+   const gallery=document.getElementById(id);if(!gallery||gallery.dataset.cameraChoice)return;
+   gallery.dataset.cameraChoice='1';
+   const camera=document.createElement('input');camera.type='file';camera.accept='image/*';camera.capture='environment';camera.hidden=true;
+   if(gallery.multiple)camera.multiple=false;
+   const take=document.createElement('button');take.type='button';take.className='secondary';take.textContent='📷 Сфотографировать';take.style.cssText='margin:4px 6px 8px 0;min-height:42px';
+   take.addEventListener('click',()=>camera.click());
+   camera.addEventListener('change',()=>{
+    if(!camera.files?.length)return;
+    try{const transfer=new DataTransfer();if(gallery.multiple)for(const old of gallery.files||[])transfer.items.add(old);for(const file of camera.files)transfer.items.add(file);gallery.files=transfer.files;gallery.dispatchEvent(new Event('change',{bubbles:true}))}
+    catch(error){console.warn('Camera file transfer unsupported',error);alert('Не удалось перенести фото в форму. Выберите снимок через поле файлов.')}
+   });
+   gallery.insertAdjacentElement('afterend',take);take.insertAdjacentElement('afterend',camera);
+   gallery.setAttribute('aria-label','Выбрать существующее фото — '+id);
+  }
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
+})();
+</script></body></html>
