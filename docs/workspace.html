@@ -633,6 +633,7 @@ const db=createClient('https://kjgalcvxxjnapcaocvry.supabase.co','sb_publishable
 const $=id=>document.getElementById(id);let staff=null;const requestedVehicle=new URLSearchParams(location.search).get('vehicle');const requestedOrder=new URLSearchParams(location.search).get('order');const requestedStorage=new URLSearchParams(location.search).get('storage');const validRecord=(s)=>/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(s||'')?s:null;const validOrder=validRecord(requestedOrder),validStorage=validRecord(requestedStorage);const validVehicle=/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(requestedVehicle||'')?requestedVehicle:null;
 function msg(t){$('msg').textContent=t||''}
 const mtReleaseHistory=[
+ {version:'2026.10.31.3',date:'2026-10-31',title:'Исправление уведомлений об обновлениях',areas:['Обновления','Запуск'],changes:['История обновлений появляется даже при медленной загрузке приложения','Версия отмечается прочитанной только после закрытия уведомления']},
  {version:'2026.10.31.2',date:'2026-10-31',title:'Восстановление загрузки без VPN',areas:['Авторизация','Подключение к базе','Мобильная версия'],changes:['Добавлен резервный адрес библиотеки подключения','При проблемах сети появляется сообщение и кнопка повтора']},
  {version:'2026.10.31.1',date:'2026-10-31',title:'Исправления приёмки и хранения',areas:['Приёмка','Хранение','Фотографии','Заказы'],changes:['Убрана третья кнопка из заказов','Добавлены даты хранения в карточку','Возвращён системный выбор камеры или галереи']},
  {version:'2026.10.30.3',date:'2026-10-30',title:'Уведомления о новых обновлениях',areas:['Обновления','Интерфейс ПК и Android'],changes:['Автоматическая проверка новых версий','Уведомление с перечнем изменений и затронутых разделов','Кнопки «Обновить сейчас» и «Позже»']},
@@ -640,7 +641,7 @@ const mtReleaseHistory=[
  {version:'2026.10.30.2',date:'2026-10-30',title:'Интерфейс заказов и прокрутка',areas:['Заказ-наряды','Приёмка','Интерфейс ПК и Android'],changes:['Редактирование существующего заказа открывается через форму приёмки','Обновлён порядок колонок активных заказов и добавлены контакты клиента','Добавлена вертикальная прокрутка при нехватке места','Фотографии доступны в шапке заказ-наряда']},
  {version:'2026.10.29',date:'2026-10-29',title:'Работа механиков и администраторов',areas:['Механики','Администрирование'],changes:['Доработаны управление работами и запросы запчастей','Улучшены уведомления о выполнении работ']}
 ];
-const mtCurrentWebRelease='2026.10.31.2';
+const mtCurrentWebRelease='2026.10.31.3';
 function mtShowReleaseHistory(auto=false){
  let modal=document.getElementById('mtReleaseHistoryDialog');
  if(!modal){
@@ -657,10 +658,13 @@ function mtShowReleaseHistory(auto=false){
   document.body.append(modal);
  }
  if(modal.showModal&&!modal.open)modal.showModal();
- if(auto)try{localStorage.setItem('mtSeenWebRelease',mtCurrentWebRelease)}catch(_){}
+ // Mark as read only after the person dismisses the changelog.
+ const closeButton=modal.querySelector('button');
+ if(closeButton)closeButton.addEventListener('click',()=>{try{localStorage.setItem('mtSeenWebRelease',mtCurrentWebRelease)}catch(_){}},{once:true});
 }
 document.getElementById('mtUpdateHistory')?.addEventListener('click',()=>mtShowReleaseHistory());
-window.addEventListener('load',()=>{try{if(localStorage.getItem('mtSeenWebRelease')!==mtCurrentWebRelease)setTimeout(()=>mtShowReleaseHistory(true),1200)}catch(_){}},{once:true});
+function mtOfferReleaseHistory(){try{if(localStorage.getItem('mtSeenWebRelease')!==mtCurrentWebRelease)setTimeout(()=>mtShowReleaseHistory(true),1200)}catch(_){}}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mtOfferReleaseHistory,{once:true});else mtOfferReleaseHistory();
 let mtUpdateOfferVersion=null;
 async function mtCheckWebRelease(){
  try{
@@ -686,7 +690,8 @@ async function mtCheckWebRelease(){
   if(!dialog.open)dialog.showModal();
  }catch(error){console.warn('MOTO TECH update check:',error)}
 }
-window.addEventListener('load',()=>{void mtCheckWebRelease();setInterval(()=>void mtCheckWebRelease(),5*60*1000)},{once:true});
+function mtStartUpdateChecks(){void mtCheckWebRelease();setInterval(()=>void mtCheckWebRelease(),5*60*1000)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mtStartUpdateChecks,{once:true});else mtStartUpdateChecks();
 async function mtRequestAppUpdate(){
  const button=$('mtCheckAppUpdate');if(button)button.disabled=true;
  try{
