@@ -5,11 +5,18 @@ const path = require('node:path');
 const {dialog} = require('electron');
 const {autoUpdater} = require('electron-updater');
 
-const DEFAULT_APP_URL = 'https://nyaganmaksimov-sys.github.io/moto-tech/workspace.html';
+const DEFAULT_APP_URL = 'https://erp-moto-tech-ru.ru/';
 const configPath = () => path.join(app.getPath('userData'), 'desktop-config.json');
 function configuredUrl() {
-  try { return JSON.parse(fs.readFileSync(configPath(), 'utf8')).url || null; }
-  catch { return DEFAULT_APP_URL; }
+  try {
+    const current = JSON.parse(fs.readFileSync(configPath(), 'utf8')).url || DEFAULT_APP_URL;
+    // Migrate installed clients from the former GitHub Pages deployment.
+    if (current === 'https://nyaganmaksimov-sys.github.io/moto-tech/workspace.html') {
+      fs.writeFileSync(configPath(), JSON.stringify({url:DEFAULT_APP_URL}, null, 2), {mode:0o600});
+      return DEFAULT_APP_URL;
+    }
+    return current;
+  } catch { return DEFAULT_APP_URL; }
 }
 function validUrl(input) {
   try {
