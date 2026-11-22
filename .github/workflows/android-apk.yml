@@ -10,7 +10,7 @@ on:
       - 'android/**'
       - '.github/workflows/android-apk.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,3 +36,20 @@ jobs:
           name: MOTO-TECH-Android-test-APK
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Publish public direct-download test APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -oE 'versionName = "[^"]+"' app/build.gradle.kts | head -1 | cut -d '"' -f2)
+          test -n "$VERSION"
+          TAG="v$VERSION"
+          # Publish ONLY on an existing release; do not create an unsigned production release.
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          # Exclude 'android' from the asset name so Android's native signed-release
+          # updater does NOT offer this debug-signed APK as a production upgrade.
+          TEST_NAME="MOTO-TECH-test-debug-$VERSION.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$TEST_NAME"
+          gh release upload "$TAG" "$TEST_NAME" --repo "$GITHUB_REPOSITORY" --clobber
