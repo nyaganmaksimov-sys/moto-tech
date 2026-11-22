@@ -13,7 +13,7 @@ import android.widget.ProgressBar
 import android.widget.TextView
 
 class MainActivity : Activity() {
- private val home="https://nyaganmaksimov-sys.github.io/moto-tech/workspace.html"
+ private val home="https://erp-moto-tech-ru.ru/"
  private lateinit var web:WebView
  private lateinit var info:TextView
  private var fileCallback:ValueCallback<Array<Uri>>?=null
@@ -49,7 +49,7 @@ class MainActivity : Activity() {
   web.webViewClient=object:WebViewClient(){
    override fun shouldOverrideUrlLoading(view:WebView?,request:WebResourceRequest):Boolean{
     val uri=request.url
-    if(uri.scheme=="https" && uri.host=="nyaganmaksimov-sys.github.io" && uri.path?.startsWith("/moto-tech/")==true)return false
+    if(uri.scheme=="https" && uri.host=="erp-moto-tech-ru.ru")return false
     if(uri.scheme=="https")startActivity(Intent(Intent.ACTION_VIEW,uri))
     return true
    }
